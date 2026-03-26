@@ -10,6 +10,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
 jobs:
   deploy-api:
@@ -26,43 +27,15 @@ jobs:
         run: bun install
 
       - name: Deploy Worker to Staging
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: apps/api
-          command: deploy --env staging
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: cd apps/api && npx wrangler deploy --env staging
 
-      - name: Set Clerk Secret Key
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: apps/api
-          command: secret put CLERK_SECRET_KEY --env staging
-          input: ${{ secrets.CLERK_SECRET_KEY }}
-
-      - name: Set Clerk Publishable Key
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: apps/api
-          command: secret put CLERK_PUBLISHABLE_KEY --env staging
-          input: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
-
-      - name: Set Resend API Key
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: apps/api
-          command: secret put RESEND_API_KEY --env staging
-          input: ${{ secrets.RESEND_API_KEY }}
+      - name: Set Secrets
+        run: |
+          echo "${{ secrets.CLERK_SECRET_KEY }}" | cd apps/api && npx wrangler secret put CLERK_SECRET_KEY --env staging
+          echo "${{ secrets.CLERK_PUBLISHABLE_KEY }}" | cd apps/api && npx wrangler secret put CLERK_PUBLISHABLE_KEY --env staging
+          echo "${{ secrets.RESEND_API_KEY }}" | cd apps/api && npx wrangler secret put RESEND_API_KEY --env staging
 
       - name: Run D1 Migrations
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          workingDirectory: apps/api
-          command: d1 migrations apply fintrack-db-staging --remote --env staging
+        run: cd apps/api && npx wrangler d1 migrations apply fintrack-db-staging --remote --env staging
 
   # Frontend auto-deploys via Vercel Git integration
