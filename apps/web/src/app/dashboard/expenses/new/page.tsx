@@ -26,7 +26,7 @@ export default function NewExpensePage() {
   } = useForm<CreateExpenseInput>({
     resolver: zodResolver(createExpenseSchema),
     defaultValues: {
-      expense_date: new Date().toISOString().split('T')[0],
+      expense_date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })(),
       currency: 'INR',
       is_group: false,
       items: [{ raw_name: '', amount: 0, quantity: 1 }],
