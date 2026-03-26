@@ -2,7 +2,6 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
     "types": ["@cloudflare/workers-types"],
     "lib": ["ES2022"],
     "jsx": "react-jsx",
@@ -12,5 +11,5 @@
       "@fintrack/shared/*": ["../../packages/shared/src/*"]
     }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "../../packages/shared/src/**/*.ts"]
 }
