@@ -1,0 +1,50 @@
+name = "finverse-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ─── D1 Database ──────────────────────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "fintrack-db"
+database_id = "80dc7069-5935-42dc-908b-5a06b6bc592c"
+migrations_dir = "src/db/migrations"
+
+# ─── Vectorize ────────────────────────────────────────────────────────────────
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "canonical-items"
+
+# ─── Workers AI ───────────────────────────────────────────────────────────────
+[ai]
+binding = "AI"
+
+# ─── Environment Variables ────────────────────────────────────────────────────
+[vars]
+ENVIRONMENT = "production"
+CORS_ORIGIN = "https://vinfin.vercel.app"
+
+# ─── Cron Triggers (monthly reminder on 1st at 9 AM UTC) ─────────────────────
+[triggers]
+crons = ["0 9 1 * *"]
+
+# ─── Staging Environment ─────────────────────────────────────────────────────
+[env.staging]
+name = "finverse-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+CORS_ORIGIN = "https://vinfin-staging.vercel.app"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "fintrack-db-staging"
+database_id = "15f3c7e6-d190-45b8-b6f8-591176788e1b"
+migrations_dir = "src/db/migrations"
+
+[[env.staging.vectorize]]
+binding = "VECTORIZE"
+index_name = "canonical-items-staging"
+
+[env.staging.ai]
+binding = "AI"
