@@ -6,8 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type "deploy" to confirm production deployment'
+        description: 'Type "deploy" to confirm'
         required: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy-api:
@@ -31,22 +34,35 @@ jobs:
           workingDirectory: apps/api
           command: deploy
 
-      - name: Set Worker Secrets (Production)
+      - name: Set Clerk Secret Key
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/api
-          command: secret bulk
-          secrets: |
-            CLERK_SECRET_KEY=${{ secrets.CLERK_SECRET_KEY }}
-            CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY }}
-            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+          command: secret put CLERK_SECRET_KEY
+          input: ${{ secrets.CLERK_SECRET_KEY }}
 
-      - name: Run D1 Migrations (Production)
+      - name: Set Clerk Publishable Key
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/api
+          command: secret put CLERK_PUBLISHABLE_KEY
+          input: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+
+      - name: Set Resend API Key
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/api
+          command: secret put RESEND_API_KEY
+          input: ${{ secrets.RESEND_API_KEY }}
+
+      - name: Run D1 Migrations
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: apps/api
           command: d1 migrations apply fintrack-db --remote
 
-  # Frontend auto-deploys via Vercel Git integration (production on release)
+  # Frontend auto-deploys via Vercel Git integration
