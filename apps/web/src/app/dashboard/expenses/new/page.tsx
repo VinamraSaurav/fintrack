@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -54,7 +54,18 @@ function mapExpenseToFormValues(expense: ExpenseResponse): CreateExpenseInput {
   };
 }
 
-export default function NewExpensePage() {
+function NewExpensePageFallback() {
+  return (
+    <div className="page-container max-w-2xl space-y-4">
+      <div className="h-6 w-28 animate-pulse rounded bg-gray-100" />
+      <div className="card-elevated h-32 animate-pulse" />
+      <div className="card-elevated h-24 animate-pulse" />
+      <div className="card-elevated h-72 animate-pulse" />
+    </div>
+  );
+}
+
+function NewExpensePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('edit') ?? '';
@@ -594,5 +605,13 @@ export default function NewExpensePage() {
         {saveError && <p className="text-sm text-red-500">Failed to save. Please try again.</p>}
       </form>
     </div>
+  );
+}
+
+export default function NewExpensePage() {
+  return (
+    <Suspense fallback={<NewExpensePageFallback />}>
+      <NewExpensePageContent />
+    </Suspense>
   );
 }
