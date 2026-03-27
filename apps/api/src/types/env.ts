@@ -5,6 +5,8 @@ export type Bindings = {
   CLERK_SECRET_KEY: string;
   CLERK_PUBLISHABLE_KEY: string;
   RESEND_API_KEY: string;
+  BREVO_API_KEY: string;
+  EMAIL_FROM: string;
   ENVIRONMENT: string;
   CORS_ORIGIN: string;
 };
