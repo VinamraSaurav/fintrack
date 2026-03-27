@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { ServiceWorkerRegister } from '@/components/shared/sw-register';
+import { OfflineBanner } from '@/components/shared/offline-banner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en" data-theme="fintrack">
         <body className="min-h-screen bg-base-200 font-sans text-base-content antialiased">
           {children}
+          <OfflineBanner />
           <ServiceWorkerRegister />
         </body>
       </html>

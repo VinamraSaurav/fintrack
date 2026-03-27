@@ -29,11 +29,26 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
       .limit(1);
 
     if (!existing) {
-      await db.insert(users).values({
-        id: userId,
-        email: (payload as any).email ?? `${userId}@clerk.user`,
-        name: (payload as any).name ?? null,
-      });
+      const email = (payload as any).email ?? `${userId}@clerk.user`;
+      const firstName = (payload as any).firstName ?? '';
+      const lastName = (payload as any).lastName ?? '';
+      const name = [firstName, lastName].filter(Boolean).join(' ') || null;
+
+      await db.insert(users).values({ id: userId, email, name });
+    } else {
+      // Update email/name if JWT has newer data
+      const email = (payload as any).email;
+      const firstName = (payload as any).firstName ?? '';
+      const lastName = (payload as any).lastName ?? '';
+      const name = [firstName, lastName].filter(Boolean).join(' ') || null;
+
+      if (email && email !== `${userId}@clerk.user`) {
+        await db.update(users).set({
+          email,
+          name,
+          updatedAt: new Date().toISOString(),
+        }).where(eq(users.id, userId));
+      }
     }
 
     await next();
