@@ -10,6 +10,7 @@ import type {
   TrendsResponse,
   CategoryResponse,
   SummaryResponse,
+  UpdateExpenseInput,
 } from '@fintrack/shared';
 
 function useAuthFetch() {
@@ -28,9 +29,7 @@ export function useExpenses(params?: Record<string, string>) {
   return useQuery({
     queryKey: ['expenses', params],
     queryFn: () =>
-      fetchWithAuth<PaginatedResponse<ExpenseResponse>>(
-        `/api/expenses?${searchParams.toString()}`,
-      ),
+      fetchWithAuth<PaginatedResponse<ExpenseResponse>>(`/api/expenses?${searchParams.toString()}`),
   });
 }
 
@@ -64,10 +63,27 @@ export function useDeleteExpense() {
   const fetchWithAuth = useAuthFetch();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      fetchWithAuth(`/api/expenses/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => fetchWithAuth(`/api/expenses/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['insights'] });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
+    },
+  });
+}
+
+export function useUpdateExpense() {
+  const fetchWithAuth = useAuthFetch();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateExpenseInput }) =>
+      fetchWithAuth<{ data: ExpenseResponse }>(`/api/expenses/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['insights'] });
       queryClient.invalidateQueries({ queryKey: ['summary'] });
     },
@@ -118,8 +134,7 @@ export function useDeleteCategory() {
   const fetchWithAuth = useAuthFetch();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      fetchWithAuth(`/api/categories/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => fetchWithAuth(`/api/categories/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
     },
@@ -132,8 +147,7 @@ export function useInsightSummary() {
   const fetchWithAuth = useAuthFetch();
   return useQuery({
     queryKey: ['insights', 'summary'],
-    queryFn: () =>
-      fetchWithAuth<{ data: InsightSummaryResponse }>('/api/insights/summary'),
+    queryFn: () => fetchWithAuth<{ data: InsightSummaryResponse }>('/api/insights/summary'),
   });
 }
 
@@ -141,8 +155,7 @@ export function useTrends(months = 6) {
   const fetchWithAuth = useAuthFetch();
   return useQuery({
     queryKey: ['insights', 'trends', months],
-    queryFn: () =>
-      fetchWithAuth<{ data: TrendsResponse }>(`/api/insights/trends?months=${months}`),
+    queryFn: () => fetchWithAuth<{ data: TrendsResponse }>(`/api/insights/trends?months=${months}`),
   });
 }
 

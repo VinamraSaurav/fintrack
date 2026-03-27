@@ -4,8 +4,31 @@ import Link from 'next/link';
 import { useExpenses } from '@/hooks/use-expenses';
 import { formatCurrency, formatRelativeDate } from '@/lib/utils';
 
+const AVATAR_TONES = [
+  'from-primary to-teal-500',
+  'from-secondary to-rose-400',
+  'from-amber-500 to-orange-400',
+  'from-sky-500 to-cyan-400',
+  'from-emerald-500 to-lime-400',
+];
+
+function hashLabel(value: string) {
+  return Array.from(value).reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+function getInitials(value: string) {
+  return (
+    value
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((chunk) => chunk[0]?.toUpperCase())
+      .join('') || '₹'
+  );
+}
+
 export function RecentExpenses() {
-  const { data, isLoading } = useExpenses({ limit: '5', sort: 'date_desc' });
+  const { data, isLoading } = useExpenses({ limit: '3', sort: 'date_desc' });
 
   if (isLoading) {
     return (
@@ -29,36 +52,53 @@ export function RecentExpenses() {
 
   return (
     <div className="card-elevated">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-900">Recent</h3>
-        <Link href="/dashboard/expenses" className="text-xs font-medium text-primary hover:underline">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Activity
+          </p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-900">Recent expenses</h3>
+        </div>
+        <Link
+          href="/dashboard/expenses"
+          className="rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-primary transition hover:text-primary/80"
+        >
           View all
         </Link>
       </div>
 
       {expenses.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-gray-400">No expenses yet</p>
-          <Link href="/dashboard/expenses/new" className="btn btn-primary btn-sm mt-3">
+        <div className="rounded-[24px] border border-dashed border-slate-200 bg-white/70 py-10 text-center">
+          <p className="text-sm text-slate-500">No expenses yet</p>
+          <Link href="/dashboard/expenses/new" className="btn btn-primary btn-sm mt-4">
             Add your first expense
           </Link>
         </div>
       ) : (
-        <div className="space-y-0">
+        <div className="space-y-2">
           {expenses.map((expense) => (
-            <div key={expense.id} className="flex items-center gap-3 border-b border-gray-50 py-2.5 last:border-0">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-sm">
-                {expense.items[0]?.categoryName?.[0] ?? '💰'}
+            <div
+              key={expense.id}
+              className="flex items-center gap-3 rounded-[24px] border border-white/70 bg-white/70 px-3 py-3 transition hover:bg-white/80"
+            >
+              <div
+                className={`flex h-11 w-11 items-center justify-center rounded-[18px] bg-gradient-to-br text-sm font-semibold text-white ${AVATAR_TONES[hashLabel(expense.items[0]?.categoryName ?? expense.title ?? expense.id) % AVATAR_TONES.length]}`}
+              >
+                {getInitials(expense.items[0]?.categoryName ?? expense.title ?? 'Expense')}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-gray-900">
+                <p className="truncate text-sm font-semibold text-slate-900">
                   {expense.title ?? expense.items.map((i) => i.displayName).join(', ')}
                 </p>
-                <p className="text-xs text-gray-400">
-                  {formatRelativeDate(expense.expenseDate)}
+                <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <span>{formatRelativeDate(expense.expenseDate)}</span>
+                  <span className="h-1 w-1 rounded-full bg-slate-300" />
+                  <span>
+                    {expense.items.length} item{expense.items.length > 1 ? 's' : ''}
+                  </span>
                 </p>
               </div>
-              <p className="text-sm font-semibold text-gray-900">
+              <p className="text-sm font-semibold text-slate-900">
                 {formatCurrency(expense.totalAmount, expense.currency)}
               </p>
             </div>

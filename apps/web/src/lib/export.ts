@@ -1,4 +1,5 @@
 import type { ExpenseResponse } from '@fintrack/shared';
+import { getTodayDateValue } from '@/lib/utils';
 
 interface ExportOptions {
   dateFrom?: string;
@@ -10,7 +11,9 @@ function flattenExpenses(expenses: ExpenseResponse[]) {
   const rows: Record<string, string | number>[] = [];
   for (const exp of expenses) {
     for (const item of exp.items) {
-      const unitPrice = item.unitPrice ?? (item.quantity > 0 ? Math.round((item.amount / item.quantity) * 100) / 100 : 0);
+      const unitPrice =
+        item.unitPrice ??
+        (item.quantity > 0 ? Math.round((item.amount / item.quantity) * 100) / 100 : 0);
       rows.push({
         Date: exp.expenseDate,
         Item: item.displayName,
@@ -45,14 +48,16 @@ export function exportCSV(expenses: ExpenseResponse[], options?: ExportOptions) 
   const csvLines = [
     headers.join(','),
     ...rows.map((row) =>
-      headers.map((h) => {
-        const val = String(row[h] ?? '');
-        return val.includes(',') || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val;
-      }).join(','),
+      headers
+        .map((h) => {
+          const val = String(row[h] ?? '');
+          return val.includes(',') || val.includes('"') ? `"${val.replace(/"/g, '""')}"` : val;
+        })
+        .join(','),
     ),
   ];
 
-  const dateStr = new Date().toISOString().split('T')[0];
+  const dateStr = getTodayDateValue();
   const blob = new Blob([csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   downloadBlob(blob, `finverse-expenses-${dateStr}.csv`);
 }
@@ -71,7 +76,7 @@ export async function exportXLSX(expenses: ExpenseResponse[], options?: ExportOp
   }));
   ws['!cols'] = colWidths;
 
-  const dateStr = new Date().toISOString().split('T')[0];
+  const dateStr = getTodayDateValue();
   XLSX.writeFile(wb, `finverse-expenses-${dateStr}.xlsx`);
 }
 
@@ -99,7 +104,9 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
   doc.setTextColor(107, 114, 128);
 
   const metaLines: string[] = [];
-  metaLines.push(`Generated: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`);
+  metaLines.push(
+    `Generated: ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+  );
   if (options?.dateFrom || options?.dateTo) {
     const from = options.dateFrom ?? 'Start';
     const to = options.dateTo ?? 'Today';
@@ -107,7 +114,10 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
   }
   metaLines.push(`Total items: ${rows.length}`);
 
-  const totalAmount = rows.reduce((sum, r) => sum + (typeof r.Amount === 'number' ? r.Amount : 0), 0);
+  const totalAmount = rows.reduce(
+    (sum, r) => sum + (typeof r.Amount === 'number' ? r.Amount : 0),
+    0,
+  );
   metaLines.push(`Total amount: INR ${totalAmount.toLocaleString('en-IN')}`);
 
   doc.text(metaLines, pageWidth - 14, 12, { align: 'right' });
@@ -117,7 +127,16 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
   doc.line(14, 27, pageWidth - 14, 27);
 
   // Table
-  const headers = ['Date', 'Item', 'Category', 'Subcategory', 'Qty', 'Unit', 'Price/Unit', 'Amount (INR)'];
+  const headers = [
+    'Date',
+    'Item',
+    'Category',
+    'Subcategory',
+    'Qty',
+    'Unit',
+    'Price/Unit',
+    'Amount (INR)',
+  ];
   const body = rows.map((r) => [
     r.Date,
     r.Item,
@@ -130,10 +149,7 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
   ]);
 
   // Add total row
-  body.push([
-    '', '', '', '', '', '', 'TOTAL',
-    `INR ${totalAmount.toLocaleString('en-IN')}`,
-  ]);
+  body.push(['', '', '', '', '', '', 'TOTAL', `INR ${totalAmount.toLocaleString('en-IN')}`]);
 
   autoTable(doc, {
     head: [headers],
@@ -172,15 +188,12 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
     didDrawPage: (data: any) => {
       doc.setFontSize(7);
       doc.setTextColor(156, 163, 175);
-      doc.text(
-        `Page ${data.pageNumber}`,
-        pageWidth / 2,
-        doc.internal.pageSize.getHeight() - 8,
-        { align: 'center' },
-      );
+      doc.text(`Page ${data.pageNumber}`, pageWidth / 2, doc.internal.pageSize.getHeight() - 8, {
+        align: 'center',
+      });
     },
   });
 
-  const dateStr = new Date().toISOString().split('T')[0];
+  const dateStr = getTodayDateValue();
   doc.save(`finverse-expenses-${dateStr}.pdf`);
 }

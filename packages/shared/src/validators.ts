@@ -3,14 +3,55 @@ import { UNITS, CURRENCIES, SORT_OPTIONS, SUMMARY_PERIODS } from './constants';
 
 // ─── Expense Item Input ──────────────────────────────────────────────────────
 
+const optionalUnitSchema = z.preprocess(
+  (value) => (value === '' || value === 'NA' || value == null ? undefined : value),
+  z.enum(UNITS).optional(),
+);
+
+const optionalIdSchema = z.preprocess(
+  (value) => (value === '' || value == null ? undefined : value),
+  z.string().optional(),
+);
+
+const itemQuantitySchema = z.preprocess(
+  (value) => {
+    if (value === undefined || value === null) return 1;
+    if (value === '' || Number.isNaN(value)) return undefined;
+    return value;
+  },
+  z
+    .number({
+      required_error: 'Enter a quantity',
+      invalid_type_error: 'Enter a valid quantity',
+    })
+    .positive('Quantity must be greater than 0'),
+);
+
+const itemAmountSchema = z.preprocess(
+  (value) => {
+    if (value === '' || value == null || Number.isNaN(value)) return undefined;
+    return value;
+  },
+  z
+    .number({
+      required_error: 'Enter a total amount',
+      invalid_type_error: 'Enter a valid amount',
+    })
+    .positive('Total amount must be greater than 0'),
+);
+
 export const createExpenseItemSchema = z.object({
-  raw_name: z.string().min(1).max(200),
-  quantity: z.number().positive().optional().default(1),
-  unit: z.enum(UNITS).optional(),
+  raw_name: z
+    .string()
+    .trim()
+    .min(1, 'Enter an item name')
+    .max(200, 'Item name must be under 200 characters'),
+  quantity: itemQuantitySchema,
+  unit: optionalUnitSchema,
   unit_price: z.number().nonnegative().optional(),
-  amount: z.number().positive(),
-  category_id: z.string().optional(),
-  subcategory_id: z.string().optional(),
+  amount: itemAmountSchema,
+  category_id: optionalIdSchema,
+  subcategory_id: optionalIdSchema,
 });
 
 export type CreateExpenseItemInput = z.infer<typeof createExpenseItemSchema>;
@@ -43,7 +84,10 @@ export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
 
 export const updateExpenseSchema = z.object({
   title: z.string().max(200).optional(),
-  expense_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expense_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   currency: z.enum(CURRENCIES).optional(),
   note: z.string().max(1000).optional(),
   items: z.array(createExpenseItemSchema).min(1).max(100).optional(),
@@ -54,8 +98,14 @@ export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
 // ─── List Expenses Query ─────────────────────────────────────────────────────
 
 export const listExpensesSchema = z.object({
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   category_id: z.string().optional(),
   product: z.string().optional(),
   min_amount: z.coerce.number().optional(),
@@ -71,8 +121,14 @@ export type ListExpensesQuery = z.infer<typeof listExpensesSchema>;
 
 export const summaryQuerySchema = z.object({
   period: z.enum(SUMMARY_PERIODS),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   category_id: z.string().optional(),
 });
 
@@ -83,7 +139,10 @@ export type SummaryQuery = z.infer<typeof summaryQuerySchema>;
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(100),
   icon: z.string().max(10).optional(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
 });
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;

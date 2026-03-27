@@ -6,7 +6,13 @@ import type { AppEnv } from '../types/env';
 import { InsightService } from '../services/insight.service';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, gte, lte, desc, sql, like } from 'drizzle-orm';
-import { expenses, expenseItems, canonicalItems, categories, subcategories } from '@fintrack/shared/schema';
+import {
+  expenses,
+  expenseItems,
+  canonicalItems,
+  categories,
+  subcategories,
+} from '@fintrack/shared/schema';
 
 const trendsQuerySchema = z.object({
   months: z.coerce.number().int().positive().max(24).optional().default(6),
@@ -14,8 +20,14 @@ const trendsQuerySchema = z.object({
 
 const itemStatsSchema = z.object({
   q: z.string().min(1).max(200),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 const drilldownSchema = z.object({
@@ -23,8 +35,14 @@ const drilldownSchema = z.object({
   period: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
   category_id: z.string().optional(),
   subcategory_id: z.string().optional(),
-  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 export const insightRoutes = new Hono<AppEnv>()
@@ -52,13 +70,18 @@ export const insightRoutes = new Hono<AppEnv>()
     if (from) conditions.push(gte(expenses.expenseDate, from));
     if (to) conditions.push(lte(expenses.expenseDate, to));
 
-    // Period grouping expression
+    // Match buckets to the UI:
+    // - daily: single day
+    // - weekly/monthly: per-day points
+    // - yearly: per-month points
     const periodExpr = (() => {
       switch (period) {
-        case 'daily': return sql`substr(${expenses.expenseDate}, 1, 10)`;
-        case 'weekly': return sql`strftime('%Y-W%W', ${expenses.expenseDate})`;
-        case 'monthly': return sql`substr(${expenses.expenseDate}, 1, 7)`;
-        case 'yearly': return sql`substr(${expenses.expenseDate}, 1, 4)`;
+        case 'daily':
+        case 'weekly':
+        case 'monthly':
+          return sql`substr(${expenses.expenseDate}, 1, 10)`;
+        case 'yearly':
+          return sql`substr(${expenses.expenseDate}, 1, 7)`;
       }
     })();
 
