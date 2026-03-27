@@ -15,12 +15,23 @@ CYAN   := \033[36m
 GREEN  := \033[32m
 YELLOW := \033[33m
 RED    := \033[31m
+BOLD   := \033[1m
+DIM    := \033[2m
+PURPLE := \033[35m
+BLUE   := \033[34m
 RESET  := \033[0m
 
 # ─── Help ─────────────────────────────────────────────────────────────────────
 help: ## Show this help message
 	@echo ""
-	@echo "$(CYAN)FinVerse$(RESET) — Smart Personal Finance Tracker"
+	@echo "$(PURPLE)$(BOLD)  ███████╗██╗███╗   ██╗██╗   ██╗███████╗██████╗ ███████╗███████╗$(RESET)"
+	@echo "$(PURPLE)$(BOLD)  ██╔════╝██║████╗  ██║██║   ██║██╔════╝██╔══██╗██╔════╝██╔════╝$(RESET)"
+	@echo "$(BLUE)$(BOLD)  █████╗  ██║██╔██╗ ██║██║   ██║█████╗  ██████╔╝███████╗█████╗  $(RESET)"
+	@echo "$(BLUE)$(BOLD)  ██╔══╝  ██║██║╚██╗██║╚██╗ ██╔╝██╔══╝  ██╔══██╗╚════██║██╔══╝  $(RESET)"
+	@echo "$(CYAN)$(BOLD)  ██║     ██║██║ ╚████║ ╚████╔╝ ███████╗██║  ██║███████║███████╗$(RESET)"
+	@echo "$(CYAN)$(BOLD)  ╚═╝     ╚═╝╚═╝  ╚═══╝  ╚═══╝  ╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝$(RESET)"
+	@echo ""
+	@echo "  $(DIM)Smart Personal Finance Tracker$(RESET)"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-22s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
@@ -110,18 +121,25 @@ deploy-all: ## Deploy to both staging and production
 	$(MAKE) deploy-prod
 
 # ─── Secrets ──────────────────────────────────────────────────────────────────
-cf-secrets-staging: ## Set CF Worker secrets for staging (interactive)
-	@echo "$(CYAN)Setting secrets for staging...$(RESET)"
-	$(WRANGLER) secret put CLERK_SECRET_KEY --env staging
-	$(WRANGLER) secret put CLERK_PUBLISHABLE_KEY --env staging
-	$(WRANGLER) secret put RESEND_API_KEY --env staging
-	@echo "$(GREEN)✓ Staging secrets set$(RESET)"
+env-sync-staging: ## Sync all secrets from .dev.vars to CF staging
+	@echo "$(CYAN)Syncing secrets to staging from .dev.vars...$(RESET)"
+	@grep -v '^#' $(ROOT)/apps/api/.dev.vars | grep -v '^$$' | while IFS='=' read -r key val; do \
+		echo "  → $$key"; \
+		echo "$$val" | $(WRANGLER) secret put "$$key" --env staging 2>&1 | tail -1; \
+	done
+	@echo "$(GREEN)✓ Staging secrets synced$(RESET)"
 
-cf-secrets-prod: ## Set CF Worker secrets for production (interactive)
-	@echo "$(CYAN)Setting secrets for production...$(RESET)"
-	$(WRANGLER) secret put CLERK_SECRET_KEY
-	$(WRANGLER) secret put CLERK_PUBLISHABLE_KEY
-	$(WRANGLER) secret put RESEND_API_KEY
+env-sync-prod: ## Sync all secrets from .dev.vars to CF production
+	@echo "$(CYAN)Syncing secrets to production from .dev.vars...$(RESET)"
+	@grep -v '^#' $(ROOT)/apps/api/.dev.vars | grep -v '^$$' | while IFS='=' read -r key val; do \
+		echo "  → $$key"; \
+		echo "$$val" | $(WRANGLER) secret put "$$key" 2>&1 | tail -1; \
+	done
+	@echo "$(GREEN)✓ Production secrets synced$(RESET)"
+
+env-sync: ## Sync all secrets to both staging and production
+	$(MAKE) env-sync-staging
+	$(MAKE) env-sync-prod
 	@echo "$(GREEN)✓ Production secrets set$(RESET)"
 
 # ─── Logs & Monitoring ───────────────────────────────────────────────────────
