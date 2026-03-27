@@ -20,41 +20,39 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
     const userId = payload.sub;
     c.set('userId', userId);
 
-    // Ensure user exists in our DB (upsert on first request)
     const db = drizzle(c.env.DB);
+
+    // Extract claims — Clerk puts custom claims at top level of JWT payload
+    const claims = payload as Record<string, any>;
+    const email = claims.email || claims.primary_email_address || null;
+    const firstName = claims.firstName || claims.first_name || '';
+    const lastName = claims.lastName || claims.last_name || '';
+    const name = [firstName, lastName].filter(Boolean).join(' ') || null;
+
     const [existing] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, email: users.email })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
 
     if (!existing) {
-      const email = (payload as any).email ?? `${userId}@clerk.user`;
-      const firstName = (payload as any).firstName ?? '';
-      const lastName = (payload as any).lastName ?? '';
-      const name = [firstName, lastName].filter(Boolean).join(' ') || null;
-
-      await db.insert(users).values({ id: userId, email, name });
-    } else {
-      // Update email/name if JWT has newer data
-      const email = (payload as any).email;
-      const firstName = (payload as any).firstName ?? '';
-      const lastName = (payload as any).lastName ?? '';
-      const name = [firstName, lastName].filter(Boolean).join(' ') || null;
-
-      if (email && email !== `${userId}@clerk.user`) {
-        await db.update(users).set({
-          email,
-          name,
-          updatedAt: new Date().toISOString(),
-        }).where(eq(users.id, userId));
-      }
+      await db.insert(users).values({
+        id: userId,
+        email: email ?? `${userId}@clerk.user`,
+        name,
+      });
+    } else if (email && existing.email !== email) {
+      // Update if we have a real email that differs from stored
+      await db.update(users).set({
+        email,
+        ...(name && { name }),
+        updatedAt: new Date().toISOString(),
+      }).where(eq(users.id, userId));
     }
 
     await next();
   } catch (err: any) {
     if (err.message?.includes('SQLITE')) {
-      // DB error during user upsert — don't block auth
       console.error('User upsert failed:', err);
       await next();
       return;
