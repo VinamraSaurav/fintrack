@@ -16,6 +16,15 @@ const suggestQuerySchema = z.object({
 });
 
 export const searchRoutes = new Hono<AppEnv>()
+  .get('/normalize', zValidator('query', z.object({ q: z.string().min(1).max(200) })), async (c) => {
+    const { q } = c.req.valid('query');
+
+    const normalization = new NormalizationService(c.env.DB, c.env.VECTORIZE, c.env.AI);
+    const preview = await normalization.preview(q);
+
+    return c.json({ data: preview });
+  })
+
   .get('/', zValidator('query', searchQuerySchema), async (c) => {
     const userId = c.get('userId');
     const { q, limit } = c.req.valid('query');

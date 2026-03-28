@@ -1,10 +1,56 @@
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, like } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { canonicalItems, aliases } from '@fintrack/shared/schema';
 import { NORMALIZATION } from '@fintrack/shared/constants';
-import type { NormalizationResult } from '@fintrack/shared/types';
+import type { NormalizationPreview, NormalizationResult } from '@fintrack/shared/types';
 import { generateId } from '../utils/id';
 import { titleCase } from '../utils/date';
+
+function normalizeComparableText(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function normalizeRawName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function levenshteinDistance(left: string, right: string) {
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
+
+  for (let i = 0; i < rows; i += 1) matrix[i][0] = i;
+  for (let j = 0; j < cols; j += 1) matrix[0][j] = j;
+
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
+      );
+    }
+  }
+
+  return matrix[left.length][right.length];
+}
+
+function isSafeAliasCandidate(rawName: string, canonicalName: string) {
+  const normalizedRaw = normalizeComparableText(rawName);
+  const normalizedCanonical = normalizeComparableText(canonicalName);
+
+  if (!normalizedRaw || !normalizedCanonical) return false;
+  if (normalizedRaw === normalizedCanonical) return true;
+
+  const distance = levenshteinDistance(normalizedRaw, normalizedCanonical);
+  const maxLength = Math.max(normalizedRaw.length, normalizedCanonical.length);
+
+  if (maxLength <= 6) return distance <= 1;
+  if (maxLength <= 12) return distance <= 2;
+
+  return distance / maxLength <= 0.18;
+}
 
 export class NormalizationService {
   private db;
@@ -21,19 +67,98 @@ export class NormalizationService {
     this.aiAvailable = !!ai && typeof ai.run === 'function';
   }
 
+  async preview(rawName: string): Promise<NormalizationPreview> {
+    const normalized = normalizeRawName(rawName);
+    if (!normalized) {
+      return {
+        status: 'new',
+        canonicalId: null,
+        displayName: null,
+        confidence: null,
+      };
+    }
+
+    const exactCanonicalMatch = await this.findExactCanonicalMatch(normalized);
+    if (exactCanonicalMatch) {
+      return {
+        status: 'exact',
+        canonicalId: exactCanonicalMatch.canonicalId,
+        displayName: exactCanonicalMatch.displayName,
+        confidence: exactCanonicalMatch.confidence,
+      };
+    }
+
+    const exactAliasMatch = await this.findExactAliasMatch(normalized);
+    if (exactAliasMatch) {
+      return {
+        status: 'suggested',
+        canonicalId: exactAliasMatch.canonicalId,
+        displayName: exactAliasMatch.displayName,
+        confidence: exactAliasMatch.confidence,
+      };
+    }
+
+    const suggestedMatch = await this.findSuggestedMatch(normalized, rawName);
+    if (suggestedMatch) {
+      return {
+        status: 'suggested',
+        canonicalId: suggestedMatch.canonicalId,
+        displayName: suggestedMatch.displayName,
+        confidence: suggestedMatch.confidence,
+      };
+    }
+
+    return {
+      status: 'new',
+      canonicalId: null,
+      displayName: null,
+      confidence: null,
+    };
+  }
+
   /**
-   * Resolve a raw user input to a canonical item name.
-   *
-   * Flow:
-   * 1. Exact alias lookup (instant, no AI cost)
-   * 2. Fuzzy DB search (fallback when Vectorize unavailable)
-   * 3. Generate embedding → vector search (when Vectorize is available)
-   * 4. Based on score: auto-accept / suggest / create new
+   * Lookup-oriented resolver. This can return a suggestion but does not persist aliases
+   * unless the input was already an exact alias match.
    */
   async resolve(rawName: string): Promise<NormalizationResult> {
-    const normalized = rawName.trim().toLowerCase();
+    const normalized = normalizeRawName(rawName);
+    const exactMatch = await this.findExactMatch(normalized);
+    if (exactMatch) return exactMatch;
 
-    // ── Step 1: Exact alias lookup ──────────────────────────────────────
+    const suggestedMatch = await this.findSuggestedMatch(normalized, rawName);
+    if (suggestedMatch) return suggestedMatch;
+
+    return this.createNewCanonical(normalized, rawName);
+  }
+
+  /**
+   * Save-time resolver. Only exact matches are auto-applied. Any fuzzy/vector match
+   * must be explicitly confirmed by the client via `confirmedCanonicalId`.
+   */
+  async resolveForSave(rawName: string, confirmedCanonicalId?: string): Promise<NormalizationResult> {
+    const normalized = normalizeRawName(rawName);
+
+    if (confirmedCanonicalId) {
+      const confirmed = await this.resolveConfirmedCanonical(rawName, confirmedCanonicalId);
+      if (confirmed) return confirmed;
+    }
+
+    const exactCanonicalMatch = await this.findExactCanonicalMatch(normalized);
+    if (exactCanonicalMatch) return exactCanonicalMatch;
+
+    return this.createNewCanonical(normalized, rawName);
+  }
+
+  private async findExactMatch(normalized: string): Promise<NormalizationResult | null> {
+    const aliasMatch = await this.findExactAliasMatch(normalized);
+    if (aliasMatch) return aliasMatch;
+
+    return this.findExactCanonicalMatch(normalized);
+  }
+
+  private async findExactAliasMatch(normalized: string): Promise<NormalizationResult | null> {
+    if (!normalized) return null;
+
     const existingAlias = await this.db
       .select({
         canonicalId: aliases.canonicalId,
@@ -53,103 +178,133 @@ export class NormalizationService {
       };
     }
 
-    // ── Step 2: Try vector search if available ──────────────────────────
-    if (this.vectorizeAvailable && this.aiAvailable) {
-      try {
-        const result = await this.resolveWithVector(normalized, rawName);
-        if (result) return result;
-      } catch (err) {
-        console.warn('Vector search failed, falling back to DB search:', err);
-      }
-    }
+    return null;
+  }
 
-    // ── Step 3: Fuzzy DB fallback (LIKE search) ─────────────────────────
-    const fuzzyMatch = await this.db
-      .select({ id: canonicalItems.id, name: canonicalItems.name })
+  private async findExactCanonicalMatch(normalized: string): Promise<NormalizationResult | null> {
+    if (!normalized) return null;
+
+    const exactCanonical = await this.db
+      .select({
+        id: canonicalItems.id,
+        name: canonicalItems.name,
+      })
       .from(canonicalItems)
-      .where(like(canonicalItems.name, `%${normalized}%`))
+      .where(sql`LOWER(TRIM(${canonicalItems.name})) = ${normalized}`)
       .limit(1);
 
-    if (fuzzyMatch.length > 0) {
-      // Cache alias for future
-      await this.db.insert(aliases).values({
-        id: generateId(),
-        rawName: normalized,
-        canonicalId: fuzzyMatch[0].id,
-        confidence: 0.7,
-      });
-
+    if (exactCanonical.length > 0) {
       return {
-        canonicalId: fuzzyMatch[0].id,
-        displayName: fuzzyMatch[0].name,
-        confidence: 0.7,
+        canonicalId: exactCanonical[0].id,
+        displayName: exactCanonical[0].name,
+        confidence: 1.0,
         source: 'alias_cache',
       };
     }
 
-    // ── Step 4: No match — create new canonical item ────────────────────
-    return this.createNewCanonical(normalized, rawName);
+    return null;
   }
 
-  private async resolveWithVector(
+  private async findSuggestedMatch(
     normalized: string,
     rawName: string,
   ): Promise<NormalizationResult | null> {
-    const embeddingResult = await this.ai!.run(NORMALIZATION.EMBEDDING_MODEL as any, {
-      text: [normalized],
-    });
-    const vector = (embeddingResult as any).data[0] as number[];
-
-    const matches = await this.vectorize!.query(vector, {
-      topK: NORMALIZATION.VECTOR_TOP_K,
-      returnMetadata: 'all',
-    });
-
-    if (matches.matches.length > 0) {
-      const best = matches.matches[0];
-      const score = best.score;
-
-      if (score >= NORMALIZATION.AUTO_ACCEPT_THRESHOLD) {
-        const [canonical] = await this.db
-          .select()
-          .from(canonicalItems)
-          .where(eq(canonicalItems.id, best.id))
-          .limit(1);
-
-        if (canonical) {
-          await this.db.insert(aliases).values({
-            id: generateId(),
-            rawName: normalized,
-            canonicalId: best.id,
-            confidence: score,
-          });
-
-          return {
-            canonicalId: best.id,
-            displayName: canonical.name,
-            confidence: score,
-            source: 'vector_auto',
-          };
-        }
-      }
-
-      if (score >= NORMALIZATION.SUGGEST_THRESHOLD) {
-        return {
-          canonicalId: best.id,
-          displayName: (best.metadata as any)?.name ?? best.id,
-          confidence: score,
-          source: 'vector_suggestion',
-          suggestions: matches.matches.map((m) => ({
-            canonicalId: m.id,
-            name: (m.metadata as any)?.name ?? m.id,
-            score: m.score,
-          })),
-        };
-      }
+    if (!normalized || !this.vectorizeAvailable || !this.aiAvailable) {
+      return null;
     }
 
-    // No good vector match — create new
-    return this.createNewCanonical(normalized, rawName, vector);
+    try {
+      const vector = await this.getEmbedding(normalized);
+      const matches = await this.vectorize!.query(vector, {
+        topK: NORMALIZATION.VECTOR_TOP_K,
+        returnMetadata: 'all',
+      });
+
+      if (matches.matches.length === 0) return null;
+
+      const best = matches.matches[0];
+      const [canonical] = await this.db
+        .select()
+        .from(canonicalItems)
+        .where(eq(canonicalItems.id, best.id))
+        .limit(1);
+
+      if (
+        !canonical ||
+        best.score < NORMALIZATION.SUGGEST_THRESHOLD ||
+        !isSafeAliasCandidate(normalized, canonical.name)
+      ) {
+        return null;
+      }
+
+      return {
+        canonicalId: best.id,
+        displayName: canonical.name,
+        confidence: best.score,
+        source: 'vector_suggestion',
+      };
+    } catch (err) {
+      console.warn('Vector suggestion failed:', err);
+      return null;
+    }
+  }
+
+  private async resolveConfirmedCanonical(
+    rawName: string,
+    canonicalId: string,
+  ): Promise<NormalizationResult | null> {
+    const [canonical] = await this.db
+      .select()
+      .from(canonicalItems)
+      .where(eq(canonicalItems.id, canonicalId))
+      .limit(1);
+
+    if (!canonical) {
+      return null;
+    }
+
+    await this.storeAlias(rawName, canonicalId, 1.0);
+
+    return {
+      canonicalId,
+      displayName: canonical.name,
+      confidence: 1.0,
+      source: 'alias_cache',
+    };
+  }
+
+  private async storeAlias(rawName: string, canonicalId: string, confidence: number) {
+    const normalized = normalizeRawName(rawName);
+    if (!normalized) return;
+
+    const [existingAlias] = await this.db
+      .select({ canonicalId: aliases.canonicalId })
+      .from(aliases)
+      .where(eq(aliases.rawName, normalized))
+      .limit(1);
+
+    if (existingAlias?.canonicalId === canonicalId) {
+      return;
+    }
+
+    if (existingAlias) {
+      await this.db.delete(aliases).where(eq(aliases.rawName, normalized));
+    }
+
+    await this.db.insert(aliases).values({
+      id: generateId(),
+      rawName: normalized,
+      canonicalId,
+      confidence,
+    });
+  }
+
+  private async getEmbedding(text: string) {
+    const embeddingResult = await this.ai!.run(NORMALIZATION.EMBEDDING_MODEL as any, {
+      text: [text],
+    });
+
+    return (embeddingResult as any).data[0] as number[];
   }
 
   private async createNewCanonical(
@@ -159,6 +314,15 @@ export class NormalizationService {
   ): Promise<NormalizationResult> {
     const newId = generateId();
     const displayName = titleCase(rawName);
+    let embedding = vector;
+
+    if (!embedding && this.vectorizeAvailable && this.aiAvailable) {
+      try {
+        embedding = await this.getEmbedding(normalized);
+      } catch {
+        embedding = undefined;
+      }
+    }
 
     await this.db.batch([
       this.db.insert(canonicalItems).values({
@@ -174,12 +338,11 @@ export class NormalizationService {
       }),
     ]);
 
-    // Upsert vector if available and we have an embedding
-    if (this.vectorizeAvailable && vector) {
+    if (this.vectorizeAvailable && embedding) {
       try {
         await this.vectorize!.upsert([{
           id: newId,
-          values: vector,
+          values: embedding,
           metadata: { name: displayName },
         }]);
       } catch {
@@ -200,34 +363,31 @@ export class NormalizationService {
    */
   async addCanonical(name: string, categoryId?: string): Promise<string> {
     const id = generateId();
-    const normalized = name.trim().toLowerCase();
+    const normalized = normalizeRawName(name);
+    let embedding: number[] | undefined;
 
-    await this.db.batch([
-      this.db.insert(canonicalItems).values({
-        id,
-        name: titleCase(name),
-        categoryId: categoryId ?? null,
-        vectorId: id,
-      }),
-      this.db.insert(aliases).values({
-        id: generateId(),
-        rawName: normalized,
-        canonicalId: id,
-        confidence: 1.0,
-      }),
-    ]);
-
-    // Generate and store embedding if AI + Vectorize available
     if (this.aiAvailable && this.vectorizeAvailable) {
       try {
-        const embeddingResult = await this.ai!.run(NORMALIZATION.EMBEDDING_MODEL as any, {
-          text: [normalized],
-        });
-        const vector = (embeddingResult as any).data[0] as number[];
+        embedding = await this.getEmbedding(normalized);
+      } catch {
+        embedding = undefined;
+      }
+    }
 
+    await this.db.insert(canonicalItems).values({
+      id,
+      name: titleCase(name),
+      categoryId: categoryId ?? null,
+      vectorId: id,
+    });
+
+    await this.storeAlias(name, id, 1.0);
+
+    if (this.vectorizeAvailable && embedding) {
+      try {
         await this.vectorize!.upsert([{
           id,
-          values: vector,
+          values: embedding,
           metadata: { name: titleCase(name) },
         }]);
       } catch {

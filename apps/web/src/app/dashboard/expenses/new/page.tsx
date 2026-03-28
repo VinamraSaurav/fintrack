@@ -8,7 +8,9 @@ import {
   createExpenseSchema,
   type CreateExpenseInput,
   type ExpenseResponse,
+  type NormalizationPreview,
   PAYMENT_MODES,
+  roundMoney,
   type Unit,
   type UpdateExpenseInput,
 } from '@fintrack/shared';
@@ -24,6 +26,19 @@ const DEFAULT_PAYMENT_MODE = PAYMENT_MODES[1];
 const itemLabelClass =
   'mb-1 block min-h-[12px] text-[10px] font-medium uppercase leading-3 text-gray-400';
 
+type ItemMatchState = {
+  status: 'loading' | 'exact' | 'suggested' | 'accepted';
+  rawName: string;
+  canonicalId?: string;
+  displayName?: string;
+  confidence?: number;
+  typedRawName?: string;
+};
+
+function normalizeItemMatchRawName(value: string) {
+  return value.trim().toLowerCase();
+}
+
 function FieldError({ message }: { message?: string }) {
   return (
     <p
@@ -34,6 +49,11 @@ function FieldError({ message }: { message?: string }) {
       {message ?? '\u00A0'}
     </p>
   );
+}
+
+function CompactFieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="mt-1 text-[11px] leading-4 text-red-500">{message}</p>;
 }
 
 function getFieldClass(baseClass: string, hasError?: boolean) {
@@ -47,7 +67,14 @@ function getDefaultExpenseValues(): CreateExpenseInput {
     expense_date: getTodayDateValue(),
     currency: 'INR',
     is_group: false,
-    items: [{ raw_name: '', amount: 0, quantity: 1, payment_mode: DEFAULT_PAYMENT_MODE }],
+    items: [
+      {
+        raw_name: '',
+        amount: 0,
+        quantity: 1,
+        payment_mode: DEFAULT_PAYMENT_MODE,
+      },
+    ],
   };
 }
 
@@ -66,10 +93,12 @@ function mapExpenseToFormValues(expense: ExpenseResponse): CreateExpenseInput {
       expense.items.length > 0
         ? expense.items.map((item) => ({
             raw_name: item.rawName,
+            canonical_id: item.canonicalId ?? undefined,
+            note: item.note ?? undefined,
             quantity: item.quantity ?? 1,
             unit: normalizeUnit(item.unit),
-            unit_price: item.unitPrice ?? undefined,
-            amount: item.amount,
+            unit_price: item.unitPrice != null ? roundMoney(item.unitPrice) : undefined,
+            amount: roundMoney(item.amount),
             payment_mode:
               (item.paymentMode as CreateExpenseInput['items'][number]['payment_mode']) ??
               DEFAULT_PAYMENT_MODE,
@@ -109,6 +138,7 @@ function NewExpensePageContent() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState('');
+  const [itemMatches, setItemMatches] = useState<Record<string, ItemMatchState>>({});
 
   const {
     register,
@@ -133,12 +163,169 @@ function NewExpensePageContent() {
     return items[items.length - 1]?.payment_mode ?? DEFAULT_PAYMENT_MODE;
   };
 
+  const appendEmptyItem = () => {
+    append({
+      raw_name: '',
+      amount: 0,
+      quantity: 1,
+      payment_mode: getPreferredPaymentMode(),
+    });
+  };
+
+  const setItemMatchState = (fieldId: string, nextState: ItemMatchState | null) => {
+    setItemMatches((current) => {
+      if (!nextState) {
+        if (!(fieldId in current)) return current;
+        const next = { ...current };
+        delete next[fieldId];
+        return next;
+      }
+
+      return {
+        ...current,
+        [fieldId]: nextState,
+      };
+    });
+  };
+
+  const clearItemMatch = (fieldId: string) => {
+    setItemMatchState(fieldId, null);
+  };
+
+  const removeItem = (index: number, fieldId: string) => {
+    clearItemMatch(fieldId);
+    remove(index);
+  };
+
   useEffect(() => {
     if (!expense) return;
     const formValues = mapExpenseToFormValues(expense);
     reset(formValues);
     replace(formValues.items);
+    setItemMatches({});
   }, [expense, replace, reset]);
+
+  const previewItemMatch = async (index: number, fieldId: string, rawNameOverride?: string) => {
+    const rawName = rawNameOverride ?? getValues(`items.${index}.raw_name`) ?? '';
+    const normalizedRawName = normalizeItemMatchRawName(rawName);
+    const existingMatch = itemMatches[fieldId];
+
+    if (rawName.trim().length < 2) {
+      setValue(`items.${index}.canonical_id`, undefined, { shouldDirty: true });
+      clearItemMatch(fieldId);
+      return;
+    }
+
+    if (
+      existingMatch &&
+      existingMatch.rawName === normalizedRawName &&
+      ['exact', 'accepted', 'suggested'].includes(existingMatch.status)
+    ) {
+      return;
+    }
+
+    setItemMatchState(fieldId, {
+      status: 'loading',
+      rawName: normalizedRawName,
+    });
+
+    try {
+      const response = await fetch(`/api/search/normalize?q=${encodeURIComponent(rawName.trim())}`);
+      const json = await response.json();
+
+      if (!response.ok) {
+        throw new Error(json.error || 'Could not preview item match');
+      }
+
+      const latestRawName = normalizeItemMatchRawName(
+        getValues(`items.${index}.raw_name`) ?? '',
+      );
+      if (latestRawName !== normalizedRawName) return;
+
+      const preview = json.data as NormalizationPreview;
+
+      if (preview.status === 'exact' && preview.canonicalId && preview.displayName) {
+        setValue(`items.${index}.canonical_id`, preview.canonicalId, { shouldDirty: true });
+        setItemMatchState(fieldId, {
+          status: 'exact',
+          rawName: normalizedRawName,
+          canonicalId: preview.canonicalId,
+          displayName: preview.displayName,
+          confidence: preview.confidence ?? undefined,
+        });
+        return;
+      }
+
+      if (preview.status === 'suggested' && preview.canonicalId && preview.displayName) {
+        const currentCanonicalId = getValues(`items.${index}.canonical_id`);
+        const isAlreadyConfirmed = currentCanonicalId === preview.canonicalId;
+        const typedRawName = existingMatch?.typedRawName ?? rawName.trim();
+        setValue(
+          `items.${index}.canonical_id`,
+          isAlreadyConfirmed ? preview.canonicalId : undefined,
+          { shouldDirty: true },
+        );
+        if (isAlreadyConfirmed) {
+          setValue(`items.${index}.raw_name`, preview.displayName, { shouldDirty: true });
+        }
+        setItemMatchState(fieldId, {
+          status: isAlreadyConfirmed ? 'accepted' : 'suggested',
+          rawName: normalizeItemMatchRawName(
+            isAlreadyConfirmed ? preview.displayName : rawName,
+          ),
+          canonicalId: preview.canonicalId,
+          displayName: preview.displayName,
+          confidence: preview.confidence ?? undefined,
+          typedRawName,
+        });
+        return;
+      }
+
+      setValue(`items.${index}.canonical_id`, undefined, { shouldDirty: true });
+      clearItemMatch(fieldId);
+    } catch {
+      const latestRawName = normalizeItemMatchRawName(getValues(`items.${index}.raw_name`) ?? '');
+      if (latestRawName === normalizedRawName) {
+        clearItemMatch(fieldId);
+      }
+    }
+  };
+
+  const acceptItemMatch = (index: number, fieldId: string) => {
+    const match = itemMatches[fieldId];
+    if (!match?.canonicalId || !match.displayName) return;
+
+    const currentRawName = getValues(`items.${index}.raw_name`) ?? '';
+    const typedRawName = match.typedRawName ?? currentRawName.trim();
+    setValue(`items.${index}.canonical_id`, match.canonicalId, { shouldDirty: true });
+    setValue(`items.${index}.raw_name`, match.displayName, { shouldDirty: true });
+    setItemMatchState(fieldId, {
+      ...match,
+      status: 'accepted',
+      rawName: normalizeItemMatchRawName(match.displayName),
+      typedRawName,
+    });
+  };
+
+  const toggleAcceptedItemMatch = (index: number, fieldId: string, accepted: boolean) => {
+    if (accepted) {
+      acceptItemMatch(index, fieldId);
+      return;
+    }
+
+    const match = itemMatches[fieldId];
+    if (!match?.displayName) return;
+
+    const typedRawName = match.typedRawName ?? getValues(`items.${index}.raw_name`) ?? '';
+    setValue(`items.${index}.canonical_id`, undefined, { shouldDirty: true });
+    setValue(`items.${index}.raw_name`, typedRawName, { shouldDirty: true });
+    setItemMatchState(fieldId, {
+      ...match,
+      status: 'suggested',
+      rawName: normalizeItemMatchRawName(typedRawName),
+      typedRawName,
+    });
+  };
 
   const handleScanBill = async (file: File) => {
     setScanning(true);
@@ -171,6 +358,7 @@ function NewExpensePageContent() {
 
         return {
           raw_name: item.name,
+          note: item.note?.trim() || undefined,
           quantity: item.quantity ?? 1,
           unit: normalizeUnit(item.unit),
           amount: item.amount ?? 0,
@@ -239,11 +427,22 @@ function NewExpensePageContent() {
   const onSubmit = async (data: CreateExpenseInput) => {
     if (!validateItemSelections(data.items)) return;
 
-    const processedItems = data.items.map((item) => ({
-      ...item,
-      unit: normalizeUnit(item.unit),
-      unit_price: item.quantity > 0 ? item.amount / item.quantity : undefined,
-    }));
+    const processedItems = data.items.map((item, index) => {
+      const fieldId = fields[index]?.id;
+      const match = fieldId ? itemMatches[fieldId] : undefined;
+      const rawName =
+        match?.status === 'accepted' && match.typedRawName
+          ? match.typedRawName
+          : item.raw_name;
+
+      return {
+        ...item,
+        raw_name: rawName,
+        amount: roundMoney(item.amount),
+        unit: normalizeUnit(item.unit),
+        unit_price: item.quantity > 0 ? roundMoney(item.amount / item.quantity) : undefined,
+      };
+    });
 
     try {
       if (isEditMode) {
@@ -344,7 +543,7 @@ function NewExpensePageContent() {
               <input
                 type="date"
                 {...register('expense_date')}
-                className={getFieldClass('input-clean', Boolean(errors.expense_date))}
+                className={getFieldClass('input-clean text-base sm:text-sm', Boolean(errors.expense_date))}
               />
               <FieldError message={errors.expense_date?.message} />
             </div>
@@ -420,25 +619,11 @@ function NewExpensePageContent() {
 
         {/* Items */}
         <div className="card-elevated space-y-3">
-          <div className="flex items-center justify-between">
+          <div>
             <div>
               <h2 className="text-sm font-semibold text-gray-900">Items</h2>
-              <p className="mt-0.5 text-xs text-gray-500">Payment mode is captured per item.</p>
+              <p className="mt-0.5 text-xs text-gray-500">Per-item payment.</p>
             </div>
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/10"
-              onClick={() =>
-                append({
-                  raw_name: '',
-                  amount: 0,
-                  quantity: 1,
-                  payment_mode: getPreferredPaymentMode(),
-                })
-              }
-            >
-              + Add item
-            </button>
           </div>
 
           {fields.map((field, index) => {
@@ -449,35 +634,37 @@ function NewExpensePageContent() {
             const amount = watchedItems?.[index]?.amount ?? 0;
             const unit = normalizeUnit(watchedItems?.[index]?.unit);
             const unitPrice = qty > 0 && amount > 0 ? (amount / qty).toFixed(2) : '-';
+            const itemMatch = itemMatches[field.id];
 
             return (
               <div
                 key={field.id}
-                className="relative rounded-lg border border-gray-100 bg-gray-50 p-3"
+                className="rounded-lg border border-gray-100 bg-gray-50 p-3"
               >
-                {/* Delete button — top right */}
-                {fields.length > 1 && (
-                  <button
-                    type="button"
-                    className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
-                    onClick={() => remove(index)}
-                    title="Remove item"
-                  >
-                    <svg
-                      className="h-3.5 w-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
+                {fields.length > 1 ? (
+                  <div className="mb-2 flex justify-end">
+                    <button
+                      type="button"
+                      className="flex h-6 w-6 items-center justify-center rounded-full bg-red-50 text-red-400 transition-colors hover:bg-red-100 hover:text-red-600"
+                      onClick={() => removeItem(index, field.id)}
+                      title="Remove item"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : null}
 
                 <div className="space-y-2">
-                  <div className="grid grid-cols-1 gap-2 pr-8 sm:grid-cols-12">
-                    <div className="sm:col-span-4">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-12">
+                    <div className="col-span-1 sm:col-span-4">
                       <label className={itemLabelClass}>
                         Category
                       </label>
@@ -503,9 +690,9 @@ function NewExpensePageContent() {
                           </option>
                         ))}
                       </select>
-                      <FieldError message={errors.items?.[index]?.category_id?.message} />
+                      <CompactFieldError message={errors.items?.[index]?.category_id?.message} />
                     </div>
-                    <div className="sm:col-span-3">
+                    <div className="col-span-1 sm:col-span-3">
                       <label className={itemLabelClass}>
                         Subcategory
                       </label>
@@ -528,14 +715,69 @@ function NewExpensePageContent() {
                         </option>
                       ))}
                       </select>
-                      <FieldError message={errors.items?.[index]?.subcategory_id?.message} />
+                      <CompactFieldError message={errors.items?.[index]?.subcategory_id?.message} />
                     </div>
-                    <div className="sm:col-span-5">
+                    <div className="col-span-2 sm:col-span-5">
                       <label className={itemLabelClass}>
                         Item Name
                       </label>
+                      {itemMatch?.status === 'loading' ? (
+                        <p className="mb-1 text-[11px] text-gray-400">
+                          Checking match...
+                        </p>
+                      ) : null}
+                      {itemMatch?.status === 'exact' && itemMatch.displayName ? (
+                        <div className="mb-1 rounded-xl border border-emerald-100 bg-emerald-50 px-2.5 py-2 text-[11px] text-emerald-700">
+                          Matched <span className="font-semibold">{itemMatch.displayName}</span>
+                        </div>
+                      ) : null}
+                      {['suggested', 'accepted'].includes(itemMatch?.status ?? '') && itemMatch?.displayName ? (
+                        <label
+                          className={`mb-1 flex items-start gap-2 rounded-xl border px-2.5 py-2 ${
+                            itemMatch.status === 'accepted'
+                              ? 'border-primary/15 bg-primary/5'
+                              : 'border-primary/15 bg-white shadow-sm'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={itemMatch.status === 'accepted'}
+                            onChange={(event) =>
+                              toggleAcceptedItemMatch(index, field.id, event.target.checked)
+                            }
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/20"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[11px] font-medium text-gray-700">
+                              Use{' '}
+                              <span className="font-semibold text-primary">{itemMatch.displayName}</span>
+                            </span>
+                            <span className="mt-0.5 block text-[10px] leading-4 text-gray-500">
+                              {itemMatch.typedRawName
+                                ? `Keeps "${itemMatch.typedRawName}" as alias.`
+                                : 'Keeps your typed name as alias.'}
+                            </span>
+                          </span>
+                        </label>
+                      ) : null}
+                      <input type="hidden" {...register(`items.${index}.canonical_id`)} />
                       <input
-                        {...register(`items.${index}.raw_name`)}
+                        {...register(`items.${index}.raw_name`, {
+                          onChange: (event) => {
+                            const nextRawName = normalizeItemMatchRawName(event.target.value);
+                            setValue(`items.${index}.canonical_id`, undefined, { shouldDirty: true });
+
+                            if (!nextRawName) {
+                              clearItemMatch(field.id);
+                              return;
+                            }
+
+                            clearItemMatch(field.id);
+                          },
+                          onBlur: (event) => {
+                            void previewItemMatch(index, field.id, event.target.value);
+                          },
+                        })}
                         className={getFieldClass(
                           'input-clean text-sm',
                           Boolean(errors.items?.[index]?.raw_name),
@@ -546,7 +788,7 @@ function NewExpensePageContent() {
                             : 'e.g. aloo, milk, exam fee'
                         }
                       />
-                      <FieldError message={errors.items?.[index]?.raw_name?.message} />
+                      <CompactFieldError message={errors.items?.[index]?.raw_name?.message} />
                     </div>
                   </div>
 
@@ -565,7 +807,7 @@ function NewExpensePageContent() {
                         )}
                         placeholder="1"
                       />
-                      <FieldError message={errors.items?.[index]?.quantity?.message} />
+                      <CompactFieldError message={errors.items?.[index]?.quantity?.message} />
                     </div>
                     <div className="sm:col-span-2">
                       <label className={itemLabelClass}>
@@ -622,7 +864,7 @@ function NewExpensePageContent() {
                         )}
                         placeholder="0"
                       />
-                      <FieldError message={errors.items?.[index]?.amount?.message} />
+                      <CompactFieldError message={errors.items?.[index]?.amount?.message} />
                     </div>
                     <div className="sm:col-span-2">
                       <label className={itemLabelClass}>
@@ -649,17 +891,49 @@ function NewExpensePageContent() {
                           </option>
                         ))}
                       </select>
-                      <FieldError message={errors.items?.[index]?.payment_mode?.message} />
+                      <CompactFieldError message={errors.items?.[index]?.payment_mode?.message} />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className={itemLabelClass}>
+                      Item note (optional)
+                    </label>
+                    <textarea
+                      {...register(`items.${index}.note`)}
+                      className={getFieldClass(
+                        'input-clean !h-auto min-h-[56px] py-2 text-sm',
+                        Boolean(errors.items?.[index]?.note),
+                      )}
+                      rows={2}
+                      placeholder="Optional note"
+                    />
+                    <CompactFieldError message={errors.items?.[index]?.note?.message} />
                   </div>
                 </div>
               </div>
             );
           })}
+
+          <div className="rounded-2xl border border-dashed border-primary/20 bg-primary/5 p-3 sm:p-4">
+            <p className="text-xs font-medium uppercase tracking-[0.28em] text-primary/65">
+              Need another line?
+            </p>
+            <p className="mt-1 text-sm text-gray-600">
+              Add the next item here once you finish the ones above.
+            </p>
+            <button
+              type="button"
+              className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-primary/25 bg-white px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/5 sm:w-auto"
+              onClick={appendEmptyItem}
+            >
+              + Add another item
+            </button>
+          </div>
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <button type="submit" className="btn btn-primary btn-sm" disabled={isSaving}>
             {isSaving ? (
               <span className="loading loading-spinner loading-xs" />

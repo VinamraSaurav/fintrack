@@ -102,7 +102,7 @@ export default function IncomePage() {
             />
             <input
               type="date"
-              className="input-clean"
+              className="input-clean text-base sm:text-sm"
               value={date}
               onChange={(e) => setDate(e.target.value)}
               required

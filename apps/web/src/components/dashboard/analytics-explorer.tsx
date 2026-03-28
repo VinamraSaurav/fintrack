@@ -385,21 +385,24 @@ export function AnalyticsExplorer() {
 
   return (
     <div className="space-y-5">
-      <div className="card-elevated !p-4">
-        <div className="space-y-4">
+      <div className="card-elevated !p-3 sm:!p-4">
+        <div className="space-y-3 sm:space-y-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="space-y-2">
-              <span className="section-badge">Analytics</span>
-              <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
+            <div className="space-y-1 sm:space-y-2">
+              <span className="section-badge hidden sm:inline-flex">Analytics</span>
+              <h1 className="text-lg font-bold text-slate-900 sm:text-2xl">
                 Explore spend from category to item
               </h1>
-              <p className="max-w-2xl text-sm text-slate-500">
+              <p className="text-[11px] text-slate-400 sm:hidden">
+                {range.from === range.to ? range.from : `${range.from} — ${range.to}`}
+              </p>
+              <p className="hidden max-w-2xl text-sm text-slate-500 sm:block">
                 Use one shared date range to drill into categories, subcategories, and item-level
                 purchase patterns.
               </p>
             </div>
 
-            <div className="rounded-[22px] bg-slate-50/80 px-4 py-3 text-right">
+            <div className="hidden rounded-[22px] bg-slate-50/80 px-4 py-3 text-right sm:block">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Current Range
               </p>
@@ -409,9 +412,88 @@ export function AnalyticsExplorer() {
             </div>
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem_14rem]">
-            <div className="space-y-3">
-              <div className="inline-flex flex-wrap rounded-full border border-slate-200/80 bg-white/80 p-1">
+          <div className="space-y-2 sm:hidden">
+            <div className="min-w-0">
+              <label className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                Search
+              </label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input-clean !h-10 rounded-xl px-3 text-[13px]"
+                placeholder={getSearchPlaceholder(current.level)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              <div className="min-w-0">
+                <label className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                  Time range
+                </label>
+                <select
+                  value={quickRange}
+                  onChange={(e) => applyQuickRange(e.target.value as QuickRange)}
+                  className="select-clean !h-10 rounded-xl px-3 text-[13px]"
+                >
+                  {QUICK_RANGES.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="min-w-0">
+                <label className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                  Payment
+                </label>
+                <select
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
+                  className="select-clean !h-10 rounded-xl px-3 text-[13px]"
+                >
+                  <option value="">All payment modes</option>
+                  {PAYMENT_MODES.map((mode) => (
+                    <option key={mode} value={mode}>
+                      {mode}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="min-w-0">
+                <label className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                  Start
+                </label>
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(e) => onChangeFrom(e.target.value)}
+                  className="input-clean !h-10 rounded-xl px-3 text-[13px]"
+                  max={to}
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-slate-400">
+                  End
+                </label>
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(e) => onChangeTo(e.target.value)}
+                  className="input-clean !h-10 rounded-xl px-3 text-[13px]"
+                  min={from}
+                  max={getTodayDateValue()}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden gap-3 sm:grid lg:grid-cols-[minmax(0,1fr)_18rem_14rem]">
+            <div className="min-w-0 space-y-3">
+              <div className="flex-wrap rounded-full border border-slate-200/80 bg-white/80 p-1 sm:inline-flex">
                 {QUICK_RANGES.map((item) => (
                   <button
                     key={item.value}
@@ -429,7 +511,7 @@ export function AnalyticsExplorer() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                     Start date
                   </label>
@@ -437,11 +519,11 @@ export function AnalyticsExplorer() {
                     type="date"
                     value={from}
                     onChange={(e) => onChangeFrom(e.target.value)}
-                    className="input-clean"
+                    className="input-clean text-base sm:text-sm"
                     max={to}
                   />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                     End date
                   </label>
@@ -449,7 +531,7 @@ export function AnalyticsExplorer() {
                     type="date"
                     value={to}
                     onChange={(e) => onChangeTo(e.target.value)}
-                    className="input-clean"
+                    className="input-clean text-base sm:text-sm"
                     min={from}
                     max={getTodayDateValue()}
                   />
@@ -457,7 +539,7 @@ export function AnalyticsExplorer() {
               </div>
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Lookup in {currentLevelLabel.toLowerCase()}
               </label>
@@ -470,7 +552,7 @@ export function AnalyticsExplorer() {
               />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <label className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Payment mode
               </label>
@@ -725,7 +807,7 @@ export function AnalyticsExplorer() {
         </div>
       )}
 
-      <div className="card-elevated overflow-x-auto !p-0">
+      <div className="card-elevated !p-0">
         <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">
@@ -737,11 +819,16 @@ export function AnalyticsExplorer() {
             </p>
           </div>
 
-          {current.level === 'item' ? (
-            <p className="text-xs text-slate-400">Select an item row to inspect its detail.</p>
-          ) : (
-            <p className="text-xs text-slate-400">Click a row to drill deeper.</p>
-          )}
+          <p className="text-[11px] text-slate-400 md:hidden">
+            {current.level === 'item'
+              ? 'Tap a card to inspect detail.'
+              : 'Tap a card to drill deeper.'}
+          </p>
+          <p className="hidden text-xs text-slate-400 md:block">
+            {current.level === 'item'
+              ? 'Select an item row to inspect its detail.'
+              : 'Click a row to drill deeper.'}
+          </p>
         </div>
 
         {filteredDistribution.length === 0 ? (
@@ -749,28 +836,19 @@ export function AnalyticsExplorer() {
             No matches in this scope.
           </div>
         ) : (
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-gray-100 text-[10px] font-medium uppercase tracking-wider text-gray-400">
-                <th className="px-4 py-2.5">
-                  {current.level === 'category'
-                    ? 'Category'
-                    : current.level === 'subcategory'
-                      ? 'Subcategory'
-                      : 'Item'}
-                </th>
-                <th className="px-4 py-2.5 text-right">Purchases</th>
-                <th className="px-4 py-2.5 text-right">Quantity</th>
-                <th className="px-4 py-2.5 text-right">Total</th>
-                <th className="px-4 py-2.5 text-right">Avg</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <div className="space-y-2 px-3 py-3 md:hidden">
               {filteredDistribution.map((item: any, index: number) => {
                 const isSelected =
                   current.level === 'item' &&
                   selectedItemName &&
                   selectedItemName.toLowerCase() === String(item.name ?? '').toLowerCase();
+                const actionLabel =
+                  current.level === 'category'
+                    ? 'Tap to open subcategories'
+                    : current.level === 'subcategory'
+                      ? 'Tap to open items'
+                      : 'Tap to inspect detail';
                 const averageValue =
                   current.level === 'item'
                     ? Number(item.avgPrice ?? 0)
@@ -779,54 +857,155 @@ export function AnalyticsExplorer() {
                       : 0;
 
                 return (
-                  <tr
+                  <button
                     key={item.id ?? item.name ?? index}
-                    className={`border-b border-gray-50 text-sm ${
-                      canDrillDeeper || current.level === 'item'
-                        ? 'cursor-pointer hover:bg-primary/5'
-                        : 'hover:bg-gray-50/50'
-                    } ${isSelected ? 'bg-primary/5' : ''}`}
+                    type="button"
+                    className={`w-full rounded-[22px] border px-4 py-3 text-left transition ${
+                      isSelected
+                        ? 'border-primary/20 bg-primary/5'
+                        : 'border-gray-100 bg-white/80 hover:border-primary/20 hover:bg-primary/5'
+                    }`}
                     onClick={() => drillInto(item)}
                   >
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-800">{item.name ?? 'Uncategorized'}</span>
-                            {item.icon ? <span className="text-xs">{item.icon}</span> : null}
-                          </div>
-                          <p className="text-[11px] text-slate-400">
-                            {current.level === 'category'
-                              ? 'Open subcategories'
-                              : current.level === 'subcategory'
-                                ? 'Open items'
-                                : 'Open item detail'}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {item.name ?? 'Uncategorized'}
                           </p>
+                          {item.icon ? <span className="shrink-0 text-xs">{item.icon}</span> : null}
                         </div>
+                        <p className="mt-1 text-[11px] font-medium text-primary/80">
+                          {actionLabel}
+                        </p>
                       </div>
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
-                      {item.count}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-600">
-                      {Math.round(Number(item.qty ?? 0) * 100) / 100}
-                      {current.level === 'item' && item.unit ? ` ${item.unit}` : ''}
-                    </td>
-                    <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
-                      {formatCurrency(Number(item.total ?? 0))}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
-                      {formatCurrency(Math.round(averageValue * 100) / 100)}
-                    </td>
-                  </tr>
+                      <div className="flex items-center gap-2">
+                        <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                          {formatCurrency(Number(item.total ?? 0))}
+                        </p>
+                        <span
+                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${
+                            isSelected
+                              ? 'border-primary/20 bg-white text-primary'
+                              : 'border-gray-200 bg-white/90 text-slate-400'
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <svg
+                            className="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-500">
+                      <span>{item.count} purchases</span>
+                      <span className="h-1 w-1 rounded-full bg-slate-300" />
+                      <span className="tabular-nums">
+                        {Math.round(Number(item.qty ?? 0) * 100) / 100}
+                        {current.level === 'item' && item.unit ? ` ${item.unit}` : ''}
+                      </span>
+                      <span className="h-1 w-1 rounded-full bg-slate-300" />
+                      <span className="tabular-nums">
+                        Avg {formatCurrency(Math.round(averageValue * 100) / 100)}
+                      </span>
+                    </div>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-gray-100 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                    <th className="px-4 py-2.5">
+                      {current.level === 'category'
+                        ? 'Category'
+                        : current.level === 'subcategory'
+                          ? 'Subcategory'
+                          : 'Item'}
+                    </th>
+                    <th className="px-4 py-2.5 text-right">Purchases</th>
+                    <th className="px-4 py-2.5 text-right">Quantity</th>
+                    <th className="px-4 py-2.5 text-right">Total</th>
+                    <th className="px-4 py-2.5 text-right">Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDistribution.map((item: any, index: number) => {
+                    const isSelected =
+                      current.level === 'item' &&
+                      selectedItemName &&
+                      selectedItemName.toLowerCase() === String(item.name ?? '').toLowerCase();
+                    const averageValue =
+                      current.level === 'item'
+                        ? Number(item.avgPrice ?? 0)
+                        : item.count > 0
+                          ? Number(item.total ?? 0) / Number(item.count ?? 0)
+                          : 0;
+
+                    return (
+                      <tr
+                        key={item.id ?? item.name ?? index}
+                        className={`border-b border-gray-50 text-sm ${
+                          canDrillDeeper || current.level === 'item'
+                            ? 'cursor-pointer hover:bg-primary/5'
+                            : 'hover:bg-gray-50/50'
+                        } ${isSelected ? 'bg-primary/5' : ''}`}
+                        onClick={() => drillInto(item)}
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-gray-800">{item.name ?? 'Uncategorized'}</span>
+                                {item.icon ? <span className="text-xs">{item.icon}</span> : null}
+                              </div>
+                              <p className="text-[11px] text-slate-400">
+                                {current.level === 'category'
+                                  ? 'Open subcategories'
+                                  : current.level === 'subcategory'
+                                    ? 'Open items'
+                                    : 'Open item detail'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
+                          {item.count}
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-600">
+                          {Math.round(Number(item.qty ?? 0) * 100) / 100}
+                          {current.level === 'item' && item.unit ? ` ${item.unit}` : ''}
+                        </td>
+                        <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
+                          {formatCurrency(Number(item.total ?? 0))}
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
+                          {formatCurrency(Math.round(averageValue * 100) / 100)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

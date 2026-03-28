@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useExpenses, useCategories } from '@/hooks/use-expenses';
 import { formatCurrency, formatDate } from '@/lib/utils';
@@ -8,6 +8,66 @@ import { exportCSV, exportXLSX, exportPDF } from '@/lib/export';
 import { useAuth } from '@clerk/nextjs';
 import { apiClient } from '@/lib/api-client';
 import { PAYMENT_MODES, type ExpenseResponse, type PaginatedResponse } from '@fintrack/shared';
+
+const itemNoteClampStyle = {
+  display: '-webkit-box',
+  WebkitBoxOrient: 'vertical' as const,
+  WebkitLineClamp: 2,
+  overflow: 'hidden',
+};
+
+function ExportMenu({
+  exporting,
+  onExport,
+}: {
+  exporting: boolean;
+  onExport: (format: 'csv' | 'xlsx' | 'pdf') => void;
+}) {
+  return (
+    <div className="dropdown dropdown-end z-30">
+      <label tabIndex={0} className="btn btn-ghost btn-sm border border-gray-200 gap-1.5 text-xs">
+        {exporting ? (
+          <span className="loading loading-spinner loading-xs" />
+        ) : (
+          <svg
+            className="h-3.5 w-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+            />
+          </svg>
+        )}
+        Export
+      </label>
+      <ul
+        tabIndex={0}
+        className="dropdown-content menu rounded-lg border border-gray-200 bg-white p-1 shadow-lg z-50 w-36"
+      >
+        <li>
+          <button onClick={() => onExport('csv')} className="text-xs">
+            CSV
+          </button>
+        </li>
+        <li>
+          <button onClick={() => onExport('xlsx')} className="text-xs">
+            Excel
+          </button>
+        </li>
+        <li>
+          <button onClick={() => onExport('pdf')} className="text-xs">
+            PDF
+          </button>
+        </li>
+      </ul>
+    </div>
+  );
+}
 
 export default function ExpensesPage() {
   const [page, setPage] = useState(1);
@@ -34,6 +94,21 @@ export default function ExpensesPage() {
   const expenses = data?.data ?? [];
   const pagination = data?.pagination;
   const categories = categoriesData?.data ?? [];
+  const activeFilterCount = [
+    dateFrom,
+    dateTo,
+    categoryFilter,
+    itemSearch.trim(),
+    minAmount,
+    maxAmount,
+    paymentModeFilter,
+    sort !== 'date_desc' ? 'sort' : '',
+  ].filter(Boolean).length;
+  const hasFilters = activeFilterCount > 0;
+
+  useEffect(() => {
+    setPage(1);
+  }, [sort, dateFrom, dateTo, categoryFilter, itemSearch, minAmount, maxAmount, paymentModeFilter]);
 
   // Flatten items with client-side filters applied
   const searchLower = itemSearch.toLowerCase();
@@ -56,6 +131,17 @@ export default function ExpensesPage() {
   );
 
   const totalFiltered = allItems.reduce((s, i) => s + i.amount, 0);
+
+  const clearFilters = () => {
+    setDateFrom('');
+    setDateTo('');
+    setCategoryFilter('');
+    setItemSearch('');
+    setMinAmount('');
+    setMaxAmount('');
+    setPaymentModeFilter('');
+    setSort('date_desc');
+  };
 
   const handleExport = async (format: 'csv' | 'xlsx' | 'pdf') => {
     setExporting(true);
@@ -101,7 +187,7 @@ export default function ExpensesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Expenses</h1>
-          <p className="text-xs text-gray-500">Filter and explore your spending data</p>
+          <p className="hidden text-xs text-gray-500 sm:block">Filter and explore your spending data</p>
         </div>
         <Link href="/dashboard/entries" className="btn btn-ghost btn-sm border border-gray-200">
           Manage Entries
@@ -109,32 +195,176 @@ export default function ExpensesPage() {
       </div>
 
       {/* Filters */}
-      <div className="card-elevated relative z-20 !p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
+      <div className="card-elevated relative z-20 !p-2.5 sm:!p-3">
+        <div className="space-y-2.5 md:hidden">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] text-slate-400">
+              {allItems.length} item{allItems.length === 1 ? '' : 's'}
+              {activeFilterCount > 0 ? ` · ${activeFilterCount} active` : ''}
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm !h-9 min-h-0 rounded-xl border border-gray-200 px-3 text-[11px]"
+                onClick={clearFilters}
+                disabled={!hasFilters}
+              >
+                Clear
+              </button>
+              <ExportMenu exporting={exporting} onExport={handleExport} />
+            </div>
+          </div>
+
+          <label className="relative block">
+            <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+              Search
+            </span>
+            <svg
+              className="pointer-events-none absolute left-3 top-[1.85rem] h-3.5 w-3.5 text-gray-300"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={1.6}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m21 21-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              className="input-clean !h-10 w-full rounded-xl pl-8 pr-3 text-[13px]"
+              placeholder="Search item"
+              value={itemSearch}
+              onChange={(e) => setItemSearch(e.target.value)}
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <label className="block">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                From
+              </span>
+              <input
+                type="date"
+                className="input-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                To
+              </span>
+              <input
+                type="date"
+                className="input-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                Category
+              </span>
+              <select
+                className="select-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {categories.map((cat: any) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                Payment
+              </span>
+              <select
+                className="select-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                value={paymentModeFilter}
+                onChange={(e) => setPaymentModeFilter(e.target.value)}
+              >
+                <option value="">All</option>
+                {PAYMENT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                Min
+              </span>
+              <input
+                type="number"
+                className="input-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                placeholder="0"
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                Max
+              </span>
+              <input
+                type="number"
+                className="input-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                placeholder="Any"
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
+              />
+            </label>
+
+            <label className="block col-span-2">
+              <span className="mb-0.5 block text-[9px] font-medium uppercase tracking-[0.22em] text-gray-400">
+                Sort
+              </span>
+              <select
+                className="select-clean !h-10 w-full rounded-xl px-3 text-[13px]"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="date_desc">Newest</option>
+                <option value="date_asc">Oldest</option>
+                <option value="amount_desc">Highest</option>
+                <option value="amount_asc">Lowest</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="hidden flex-wrap items-end gap-3 md:flex">
+          <div className="w-full min-[440px]:w-auto">
             <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
               From
             </label>
             <input
               type="date"
-              className="input-clean w-auto text-xs"
+              className="input-clean w-full text-base min-[440px]:w-[10.5rem] sm:text-sm"
               value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setDateFrom(e.target.value)}
             />
           </div>
-          <div>
+          <div className="w-full min-[440px]:w-auto">
             <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">To</label>
             <input
               type="date"
-              className="input-clean w-auto text-xs"
+              className="input-clean w-full text-base min-[440px]:w-[10.5rem] sm:text-sm"
               value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setDateTo(e.target.value)}
             />
           </div>
           <div>
@@ -175,10 +405,7 @@ export default function ExpensesPage() {
               className="input-clean w-24 text-xs"
               placeholder="0"
               value={minAmount}
-              onChange={(e) => {
-                setMinAmount(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setMinAmount(e.target.value)}
             />
           </div>
           <div>
@@ -190,10 +417,7 @@ export default function ExpensesPage() {
               className="input-clean w-24 text-xs"
               placeholder="Any"
               value={maxAmount}
-              onChange={(e) => {
-                setMaxAmount(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setMaxAmount(e.target.value)}
             />
           </div>
           <div>
@@ -203,10 +427,7 @@ export default function ExpensesPage() {
             <select
               className="select-clean w-auto text-xs"
               value={paymentModeFilter}
-              onChange={(e) => {
-                setPaymentModeFilter(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setPaymentModeFilter(e.target.value)}
             >
               <option value="">All</option>
               {PAYMENT_MODES.map((mode) => (
@@ -232,51 +453,7 @@ export default function ExpensesPage() {
             </select>
           </div>
           <div className="ml-auto">
-            <div className="dropdown dropdown-end z-30">
-              <label
-                tabIndex={0}
-                className="btn btn-ghost btn-sm border border-gray-200 gap-1.5 text-xs"
-              >
-                {exporting ? (
-                  <span className="loading loading-spinner loading-xs" />
-                ) : (
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
-                    />
-                  </svg>
-                )}
-                Export
-              </label>
-              <ul
-                tabIndex={0}
-                className="dropdown-content menu rounded-lg border border-gray-200 bg-white p-1 shadow-lg z-50 w-36"
-              >
-                <li>
-                  <button onClick={() => handleExport('csv')} className="text-xs">
-                    CSV
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => handleExport('xlsx')} className="text-xs">
-                    Excel
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => handleExport('pdf')} className="text-xs">
-                    PDF
-                  </button>
-                </li>
-              </ul>
-            </div>
+            <ExportMenu exporting={exporting} onExport={handleExport} />
           </div>
         </div>
       </div>
@@ -293,19 +470,85 @@ export default function ExpensesPage() {
           <p className="text-gray-400">No items found matching filters</p>
         </div>
       ) : (
-        <div className="card-elevated relative z-0 overflow-x-auto !p-0">
-          <table className="w-full text-left">
+        <>
+          <div className="space-y-3 md:hidden">
+            {allItems.map((item) => (
+              <article key={`${item.expenseId}-${item.id}`} className="card-elevated !p-3">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-gray-900">
+                      {item.displayName}
+                    </p>
+                    {item.note ? (
+                      <p
+                        className="mt-0.5 text-[11px] leading-4 text-gray-400"
+                        style={itemNoteClampStyle}
+                        title={item.note}
+                      >
+                        {item.note}
+                      </p>
+                    ) : null}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
+                      <span>{formatDate(item.expenseDate)}</span>
+                      <span className="h-1 w-1 rounded-full bg-gray-300" />
+                      <span>{item.categoryName ?? 'Uncategorized'}</span>
+                      {item.subcategoryName ? (
+                        <>
+                          <span className="h-1 w-1 rounded-full bg-gray-300" />
+                          <span>{item.subcategoryName}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  <p className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
+                    {formatCurrency(item.amount, item.currency)}
+                  </p>
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
+                  <span className="font-medium text-gray-700">
+                    {item.quantity} {item.unit ?? 'unit'}
+                  </span>
+                  <span className="h-1 w-1 rounded-full bg-gray-300" />
+                  <span>{item.paymentMode ?? '-'}</span>
+                  <span className="h-1 w-1 rounded-full bg-gray-300" />
+                  <span className="tabular-nums">
+                    {item.unitPrice
+                      ? formatCurrency(item.unitPrice, item.currency)
+                      : item.quantity > 0
+                        ? formatCurrency(item.amount / item.quantity, item.currency)
+                        : '-'}{' '}
+                    / {item.unit ?? 'unit'}
+                  </span>
+                </div>
+              </article>
+            ))}
+
+            <div className="rounded-[24px] border border-gray-100 bg-gray-50/80 px-4 py-3 text-sm text-gray-500">
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  {allItems.length} item{allItems.length === 1 ? '' : 's'}
+                </span>
+                <span className="font-semibold tabular-nums text-gray-900">
+                  {formatCurrency(totalFiltered)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="card-elevated relative z-0 hidden overflow-x-auto !p-0 md:block">
+          <table className="min-w-[72rem] w-full table-fixed text-left">
             <thead>
               <tr className="border-b border-gray-100 text-[10px] font-medium uppercase tracking-wider text-gray-400">
-                <th className="px-3 py-2.5">Date</th>
-                <th className="px-3 py-2.5">Item</th>
-                <th className="px-3 py-2.5">Category</th>
-                <th className="px-3 py-2.5">Subcategory</th>
-                <th className="px-3 py-2.5">Payment</th>
-                <th className="px-3 py-2.5 text-right">Qty</th>
-                <th className="px-3 py-2.5">Unit</th>
-                <th className="px-3 py-2.5 text-right">Price/Unit</th>
-                <th className="px-3 py-2.5 text-right">Amount</th>
+                <th className="w-[7rem] px-3 py-2.5">Date</th>
+                <th className="w-[17rem] px-3 py-2.5">Item</th>
+                <th className="w-[8rem] px-3 py-2.5">Category</th>
+                <th className="w-[8rem] px-3 py-2.5">Subcategory</th>
+                <th className="w-[8rem] px-3 py-2.5">Payment</th>
+                <th className="w-[5rem] px-3 py-2.5 text-right">Qty</th>
+                <th className="w-[5rem] px-3 py-2.5">Unit</th>
+                <th className="w-[7rem] px-3 py-2.5 text-right">Price/Unit</th>
+                <th className="w-[7rem] px-3 py-2.5 text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -317,14 +560,29 @@ export default function ExpensesPage() {
                   <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">
                     {formatDate(item.expenseDate)}
                   </td>
-                  <td className="px-3 py-2 font-medium text-gray-900">{item.displayName}</td>
+                  <td className="px-3 py-2 align-top">
+                    <div className="w-[17rem] max-w-full">
+                      <p className="truncate font-medium text-gray-900">{item.displayName}</p>
+                      {item.note ? (
+                        <p
+                          className="mt-0.5 text-[11px] leading-4 text-gray-400"
+                          style={itemNoteClampStyle}
+                          title={item.note}
+                        >
+                          {item.note}
+                        </p>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="px-3 py-2 text-xs text-gray-500">{item.categoryName ?? '-'}</td>
                   <td className="px-3 py-2 text-xs text-gray-400">{item.subcategoryName ?? '-'}</td>
                   <td className="px-3 py-2 text-xs text-gray-500">{item.paymentMode ?? '-'}</td>
-                  <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-600">
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-xs tabular-nums text-gray-600">
                     {item.quantity}
                   </td>
-                  <td className="px-3 py-2 text-xs text-gray-400">{item.unit ?? '-'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-400">
+                    {item.unit ?? '-'}
+                  </td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-500">
                     {item.unitPrice
                       ? formatCurrency(item.unitPrice, item.currency)
@@ -349,7 +607,8 @@ export default function ExpensesPage() {
               </tr>
             </tfoot>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Pagination */}

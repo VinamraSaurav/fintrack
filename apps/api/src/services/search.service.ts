@@ -47,7 +47,15 @@ export class SearchService {
    * Search by product name — resolves to canonical, then finds all matching items.
    */
   async searchByProduct(userId: string, productName: string) {
-    const resolution = await this.normalization.resolve(productName);
+    const resolution = await this.normalization.preview(productName);
+
+    if (!resolution.canonicalId || !resolution.displayName) {
+      return {
+        canonicalName: productName,
+        canonicalId: null,
+        items: [],
+      };
+    }
 
     const items = await this.db
       .select({

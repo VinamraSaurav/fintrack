@@ -7,7 +7,7 @@ import { formatCurrency, formatCurrencyCompact } from '@/lib/utils';
 function SparkleGlyph() {
   return (
     <svg
-      className="h-4.5 w-4.5"
+      className="h-[18px] w-[18px]"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"

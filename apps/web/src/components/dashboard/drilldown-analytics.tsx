@@ -458,56 +458,62 @@ export function DrilldownAnalytics() {
 
       {/* Distribution table — clickable to drill down */}
       {distribution.length > 0 && (
-        <div className="card-elevated overflow-x-auto !p-0">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-gray-100 text-[10px] font-medium uppercase tracking-wider text-gray-400">
-                <th className="px-4 py-2.5">
+        <>
+          <div className="card-elevated space-y-3 md:hidden">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
                   {current.level === 'category'
-                    ? 'Category'
+                    ? 'Categories'
                     : current.level === 'subcategory'
-                      ? 'Subcategory'
-                      : 'Item'}
-                </th>
-                {current.level === 'item' && <th className="px-4 py-2.5 text-right">Total Qty</th>}
-                {current.level === 'item' && (
-                  <th className="px-4 py-2.5 text-right">Avg Price/Unit</th>
-                )}
-                <th className="px-4 py-2.5 text-right">Purchases</th>
-                <th className="px-4 py-2.5 text-right">Total</th>
-                <th className="px-4 py-2.5 text-right">%</th>
-              </tr>
-            </thead>
-            <tbody>
+                      ? 'Subcategories'
+                      : 'Items'}
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {current.level === 'item' ? 'Quick totals for each item.' : 'Tap a card to drill deeper.'}
+                </p>
+              </div>
+              <p className="text-[11px] text-slate-400">{distribution.length} shown</p>
+            </div>
+
+            <div className="space-y-2">
               {distribution.map((item: any, i: number) => {
                 const pct = totalAll > 0 ? Math.round((item.total / totalAll) * 100) : 0;
                 const canDrill = current.level !== 'item';
                 return (
-                  <tr
+                  <button
                     key={item.id ?? item.name ?? i}
-                    className={`border-b border-gray-50 text-sm ${canDrill ? 'cursor-pointer hover:bg-primary/5' : 'hover:bg-gray-50/50'}`}
+                    type="button"
+                    className={`w-full rounded-[24px] border border-gray-100 bg-white/80 px-4 py-3 text-left transition ${
+                      canDrill ? 'hover:border-primary/20 hover:bg-primary/5' : 'cursor-default'
+                    }`}
                     onClick={() => canDrill && drillInto(item)}
                   >
-                    <td className="px-4 py-2">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-800">{item.name ?? 'Uncategorized'}</span>
-                            {item.icon && <span className="text-xs">{item.icon}</span>}
-                          </div>
-                          {canDrill && (
-                            <p className="text-[11px] text-slate-400">
-                              {current.level === 'category' ? 'View subcategories' : 'View items'}
-                            </p>
-                          )}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                          />
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {item.name ?? 'Uncategorized'}
+                          </p>
+                          {item.icon ? <span className="shrink-0 text-xs">{item.icon}</span> : null}
                         </div>
-                        {canDrill && (
+                        {canDrill ? (
+                          <p className="mt-1 text-[11px] text-slate-400">
+                            {current.level === 'category' ? 'Open subcategories' : 'Open items'}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                          {formatCurrency(item.total)}
+                        </p>
+                        {canDrill ? (
                           <svg
-                            className="h-3 w-3 text-gray-300"
+                            className="h-3.5 w-3.5 shrink-0 text-gray-300"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -515,32 +521,130 @@ export function DrilldownAnalytics() {
                           >
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                           </svg>
-                        )}
+                        ) : null}
                       </div>
-                    </td>
-                    {current.level === 'item' && (
-                      <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-600">
-                        {item.qty} {item.unit ?? ''}
-                      </td>
-                    )}
-                    {current.level === 'item' && (
-                      <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
-                        {formatCurrency(Math.round((item.avgPrice ?? 0) * 100) / 100)}
-                      </td>
-                    )}
-                    <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
-                      {item.count}
-                    </td>
-                    <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
-                      {formatCurrency(item.total)}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs text-gray-500">{pct}%</td>
-                  </tr>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-gray-50/80 px-3 py-2.5 text-[11px] text-slate-500">
+                      <div>
+                        <p className="uppercase tracking-[0.18em] text-slate-400">Purchases</p>
+                        <p className="mt-1 font-medium text-slate-700">{item.count}</p>
+                      </div>
+                      <div>
+                        <p className="uppercase tracking-[0.18em] text-slate-400">Share</p>
+                        <p className="mt-1 font-medium text-slate-700">{pct}%</p>
+                      </div>
+                      {current.level === 'item' ? (
+                        <>
+                          <div>
+                            <p className="uppercase tracking-[0.18em] text-slate-400">Total Qty</p>
+                            <p className="mt-1 font-medium text-slate-700">
+                              {item.qty} {item.unit ?? ''}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="uppercase tracking-[0.18em] text-slate-400">
+                              Avg Price
+                            </p>
+                            <p className="mt-1 font-medium text-slate-700 tabular-nums">
+                              {formatCurrency(Math.round((item.avgPrice ?? 0) * 100) / 100)}
+                            </p>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          </div>
+
+          <div className="card-elevated hidden overflow-x-auto !p-0 md:block">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-gray-100 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                  <th className="px-4 py-2.5">
+                    {current.level === 'category'
+                      ? 'Category'
+                      : current.level === 'subcategory'
+                        ? 'Subcategory'
+                        : 'Item'}
+                  </th>
+                  {current.level === 'item' && (
+                    <th className="px-4 py-2.5 text-right">Total Qty</th>
+                  )}
+                  {current.level === 'item' && (
+                    <th className="px-4 py-2.5 text-right">Avg Price/Unit</th>
+                  )}
+                  <th className="px-4 py-2.5 text-right">Purchases</th>
+                  <th className="px-4 py-2.5 text-right">Total</th>
+                  <th className="px-4 py-2.5 text-right">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {distribution.map((item: any, i: number) => {
+                  const pct = totalAll > 0 ? Math.round((item.total / totalAll) * 100) : 0;
+                  const canDrill = current.level !== 'item';
+                  return (
+                    <tr
+                      key={item.id ?? item.name ?? i}
+                      className={`border-b border-gray-50 text-sm ${canDrill ? 'cursor-pointer hover:bg-primary/5' : 'hover:bg-gray-50/50'}`}
+                      onClick={() => canDrill && drillInto(item)}
+                    >
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-gray-800">{item.name ?? 'Uncategorized'}</span>
+                              {item.icon && <span className="text-xs">{item.icon}</span>}
+                            </div>
+                            {canDrill && (
+                              <p className="text-[11px] text-slate-400">
+                                {current.level === 'category' ? 'View subcategories' : 'View items'}
+                              </p>
+                            )}
+                          </div>
+                          {canDrill && (
+                            <svg
+                              className="h-3 w-3 text-gray-300"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </td>
+                      {current.level === 'item' && (
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-600">
+                          {item.qty} {item.unit ?? ''}
+                        </td>
+                      )}
+                      {current.level === 'item' && (
+                        <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
+                          {formatCurrency(Math.round((item.avgPrice ?? 0) * 100) / 100)}
+                        </td>
+                      )}
+                      <td className="px-4 py-2 text-right text-xs tabular-nums text-gray-500">
+                        {item.count}
+                      </td>
+                      <td className="px-4 py-2 text-right font-medium tabular-nums text-gray-900">
+                        {formatCurrency(item.total)}
+                      </td>
+                      <td className="px-4 py-2 text-right text-xs text-gray-500">{pct}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {canGoBack && previousCrumb && (

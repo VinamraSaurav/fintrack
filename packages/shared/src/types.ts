@@ -41,6 +41,7 @@ export interface ExpenseItemResponse {
   rawName: string;
   displayName: string;
   canonicalId: string | null;
+  note: string | null;
   quantity: number;
   unit: string | null;
   unitPrice: number | null;
@@ -142,4 +143,11 @@ export interface NormalizationSuggestion {
   canonicalId: string;
   name: string;
   score: number;
+}
+
+export interface NormalizationPreview {
+  status: 'exact' | 'suggested' | 'new';
+  canonicalId: string | null;
+  displayName: string | null;
+  confidence: number | null;
 }

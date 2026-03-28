@@ -7,6 +7,53 @@ interface ExportOptions {
   userName?: string;
 }
 
+const PDF_ITEM_FONT_SIZE = 7.5;
+const PDF_ITEM_LINE_HEIGHT = 3.4;
+const PDF_ITEM_NOTE_FONT_SIZE = 6.1;
+const PDF_ITEM_NOTE_LINE_HEIGHT = 2.8;
+const PDF_ITEM_COLUMN_WIDTH = 90;
+const PDF_ITEM_TEXT_WIDTH = PDF_ITEM_COLUMN_WIDTH - 4;
+
+function truncatePdfText(doc: any, text: string, maxWidth: number) {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  if (doc.getTextWidth(trimmed) <= maxWidth) return trimmed;
+
+  let candidate = trimmed;
+  while (candidate.length > 0 && doc.getTextWidth(`${candidate}...`) > maxWidth) {
+    candidate = candidate.slice(0, -1).trimEnd();
+  }
+
+  return candidate ? `${candidate}...` : '...';
+}
+
+function getWrappedPdfLines(doc: any, text: string, maxWidth: number) {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  return doc
+    .splitTextToSize(trimmed, maxWidth)
+    .map((line: string) => line.trim())
+    .filter(Boolean);
+}
+
+function getClampedPdfLines(doc: any, text: string, maxWidth: number, maxLines: number) {
+  const splitLines = getWrappedPdfLines(doc, text, maxWidth);
+
+  if (splitLines.length <= maxLines) {
+    return splitLines;
+  }
+
+  return [
+    ...splitLines.slice(0, Math.max(0, maxLines - 1)),
+    truncatePdfText(doc, splitLines.slice(Math.max(0, maxLines - 1)).join(' '), maxWidth),
+  ];
+}
+
+function getClampedPdfNoteLines(doc: any, note: string, maxWidth: number) {
+  return getClampedPdfLines(doc, note, maxWidth, 2);
+}
+
 function flattenExpenses(expenses: ExpenseResponse[]) {
   const rows: Record<string, string | number>[] = [];
   for (const exp of expenses) {
@@ -17,6 +64,7 @@ function flattenExpenses(expenses: ExpenseResponse[]) {
       rows.push({
         Date: exp.expenseDate,
         Item: item.displayName,
+        'Item Note': item.note ?? '',
         Category: item.categoryName ?? 'Uncategorized',
         Subcategory: item.subcategoryName ?? '-',
         Payment: item.paymentMode ?? '-',
@@ -139,16 +187,31 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
     'Price/Unit',
     'Amount (INR)',
   ];
-  const body = rows.map((r) => [
-    r.Date,
-    r.Item,
-    r.Category,
-    r.Subcategory,
-    r.Payment,
-    r.Quantity,
-    r.Unit,
-    typeof r['Price/Unit'] === 'number' ? r['Price/Unit'].toLocaleString('en-IN') : r['Price/Unit'],
-    typeof r.Amount === 'number' ? r.Amount.toLocaleString('en-IN') : r.Amount,
+  const pdfRows = rows.map((r) => ({
+    date: String(r.Date),
+    item: String(r.Item),
+    itemNote: String(r['Item Note'] ?? ''),
+    category: String(r.Category),
+    subcategory: String(r.Subcategory),
+    payment: String(r.Payment),
+    quantity: String(r.Quantity),
+    unit: String(r.Unit),
+    pricePerUnit:
+      typeof r['Price/Unit'] === 'number' ? r['Price/Unit'].toLocaleString('en-IN') : r['Price/Unit'],
+    amount: typeof r.Amount === 'number' ? r.Amount.toLocaleString('en-IN') : r.Amount,
+  }));
+  const itemLinesByRow = new Map<number, string[]>();
+  const noteLinesByRow = new Map<number, string[]>();
+  const body = pdfRows.map((r) => [
+    r.date,
+    r.item,
+    r.category,
+    r.subcategory,
+    r.payment,
+    r.quantity,
+    r.unit,
+    r.pricePerUnit,
+    r.amount,
   ]);
 
   // Add total row
@@ -174,12 +237,38 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
       fillColor: [249, 250, 251],
     },
     columnStyles: {
-      0: { cellWidth: 22 },
-      5: { halign: 'right' },
-      7: { halign: 'right' },
+      0: { cellWidth: 20 },
+      1: { cellWidth: PDF_ITEM_COLUMN_WIDTH },
+      2: { cellWidth: 21 },
+      3: { cellWidth: 23 },
+      4: { cellWidth: 16 },
+      5: { cellWidth: 10, halign: 'right' },
+      6: { cellWidth: 12 },
+      7: { cellWidth: 18, halign: 'right' },
       8: { halign: 'right', fontStyle: 'bold' },
     },
     didParseCell: (data: any) => {
+      if (data.section === 'body' && data.column.index === 1 && data.row.index < pdfRows.length) {
+        const row = pdfRows[data.row.index];
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(PDF_ITEM_FONT_SIZE);
+        const itemLines = getClampedPdfLines(doc, row.item, PDF_ITEM_TEXT_WIDTH, 2);
+        doc.setFontSize(PDF_ITEM_NOTE_FONT_SIZE);
+        const noteLines = row.itemNote
+          ? getClampedPdfNoteLines(doc, row.itemNote, PDF_ITEM_TEXT_WIDTH)
+          : [];
+
+        itemLinesByRow.set(data.row.index, itemLines);
+        noteLinesByRow.set(data.row.index, noteLines);
+        data.cell.text = itemLines;
+        data.cell.styles.valign = 'top';
+        data.cell.styles.minCellHeight =
+          4 +
+          itemLines.length * PDF_ITEM_LINE_HEIGHT +
+          (noteLines.length > 0 ? 1.4 + noteLines.length * PDF_ITEM_NOTE_LINE_HEIGHT : 0);
+        doc.setFontSize(PDF_ITEM_FONT_SIZE);
+      }
+
       // Style the total row
       if (data.row.index === body.length - 1) {
         data.cell.styles.fontStyle = 'bold';
@@ -187,6 +276,39 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
         data.cell.styles.textColor = [17, 24, 39];
         data.cell.styles.fontSize = 8.5;
       }
+    },
+    didDrawCell: (data: any) => {
+      if (
+        data.section !== 'body' ||
+        data.column.index !== 1 ||
+        data.row.index >= pdfRows.length ||
+        data.row.index === body.length - 1
+      ) {
+        return;
+      }
+
+      const noteLines = noteLinesByRow.get(data.row.index);
+      const itemLines = itemLinesByRow.get(data.row.index) ?? [];
+      if (!noteLines || noteLines.length === 0) {
+        return;
+      }
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(PDF_ITEM_NOTE_FONT_SIZE);
+      doc.setTextColor(156, 163, 175);
+      doc.text(
+        noteLines,
+        data.cell.x + 2,
+        data.cell.y + 3.2 + itemLines.length * PDF_ITEM_LINE_HEIGHT,
+        {
+          baseline: 'top',
+          maxWidth: data.cell.width - 4,
+        },
+      );
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(PDF_ITEM_FONT_SIZE);
+      doc.setTextColor(31, 41, 55);
     },
     didDrawPage: (data: any) => {
       doc.setFontSize(7);

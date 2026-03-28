@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
+import { roundMoney } from '@fintrack/shared';
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -31,7 +32,7 @@ export function formatCurrency(amount: number, currency = 'INR'): string {
     currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(roundMoney(amount));
 }
 
 export function formatCurrencyCompact(amount: number, currency = 'INR'): string {
@@ -41,7 +42,7 @@ export function formatCurrencyCompact(amount: number, currency = 'INR'): string 
     notation: 'compact',
     minimumFractionDigits: 0,
     maximumFractionDigits: 1,
-  }).format(amount);
+  }).format(roundMoney(amount));
 }
 
 export function formatDate(dateStr: string): string {

@@ -13,6 +13,16 @@ const optionalIdSchema = z.preprocess(
   z.string().optional(),
 );
 
+const optionalItemNoteSchema = z.preprocess(
+  (value) => {
+    if (value == null) return undefined;
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  },
+  z.string().max(280, 'Note too long').optional(),
+);
+
 const itemQuantitySchema = z.preprocess(
   (value) => {
     if (value === undefined || value === null) return 1;
@@ -46,6 +56,8 @@ export const createExpenseItemSchema = z.object({
     .trim()
     .min(1, 'Enter item')
     .max(200, 'Item too long'),
+  canonical_id: optionalIdSchema,
+  note: optionalItemNoteSchema,
   quantity: itemQuantitySchema,
   unit: optionalUnitSchema,
   unit_price: z.number().nonnegative().optional(),
@@ -99,6 +111,15 @@ export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
 // ─── List Expenses Query ─────────────────────────────────────────────────────
 
 export const listExpensesSchema = z.object({
+  q: z.preprocess(
+    (value) => {
+      if (value == null) return undefined;
+      if (typeof value !== 'string') return value;
+      const trimmed = value.trim();
+      return trimmed === '' ? undefined : trimmed;
+    },
+    z.string().min(1).optional(),
+  ),
   from: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)

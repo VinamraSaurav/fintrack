@@ -1,7 +1,10 @@
 import type { NextConfig } from 'next';
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants';
 
-const nextConfig: NextConfig = {
+const createConfig = (phase: string): NextConfig => ({
+  // Keep dev output separate so `next build` doesn't corrupt a running dev server.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next-dev' : '.next',
   transpilePackages: ['@fintrack/shared'],
-};
+});
 
-export default nextConfig;
+export default createConfig;

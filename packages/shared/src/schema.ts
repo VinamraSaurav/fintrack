@@ -109,6 +109,7 @@ export const expenseItems = sqliteTable('expense_items', {
   canonicalId: text('canonical_id').references(() => canonicalItems.id),
   rawName: text('raw_name').notNull(),
   displayName: text('display_name').notNull(),
+  note: text('note'),
   quantity: real('quantity').notNull().default(1),
   unit: text('unit'), // kg, L, pcs, kWh, NA
   unitPrice: real('unit_price'),

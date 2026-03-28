@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, and, gte, lte, desc, asc, sql, inArray } from 'drizzle-orm';
+import { roundMoney, roundOptionalMoney } from '@fintrack/shared';
 import { expenses, expenseItems, expenseParticipants, categories, subcategories } from '@fintrack/shared/schema';
 import type {
   CreateExpenseInput,
@@ -47,6 +48,7 @@ export class ExpenseService {
       rawName: string;
       displayName: string;
       canonicalId: string | null;
+      note: string | null;
       quantity: number;
       unit: string | null;
       unitPrice: number | null;
@@ -59,19 +61,25 @@ export class ExpenseService {
     let totalAmount = 0;
 
     for (const item of input.items) {
-      const resolution = await this.normalization.resolve(item.raw_name);
+      const resolution = await this.normalization.resolveForSave(
+        item.raw_name,
+        item.canonical_id,
+      );
       const itemId = generateId();
-      totalAmount += item.amount;
+      const amount = roundMoney(item.amount);
+      const unitPrice = roundOptionalMoney(item.unit_price ?? null) ?? null;
+      totalAmount = roundMoney(totalAmount + amount);
 
       resolvedItems.push({
         id: itemId,
         rawName: item.raw_name,
         displayName: resolution.displayName,
         canonicalId: resolution.canonicalId,
+        note: item.note ?? null,
         quantity: item.quantity ?? 1,
         unit: item.unit ?? null,
-        unitPrice: item.unit_price ?? null,
-        amount: item.amount,
+        unitPrice,
+        amount,
         paymentMode: item.payment_mode ?? null,
         categoryId: item.category_id ?? null,
         subcategoryId: item.subcategory_id ?? null,
@@ -98,6 +106,7 @@ export class ExpenseService {
           canonicalId: item.canonicalId,
           rawName: item.rawName,
           displayName: item.displayName,
+          note: item.note,
           quantity: item.quantity,
           unit: item.unit,
           unitPrice: item.unitPrice,
@@ -144,6 +153,7 @@ export class ExpenseService {
         rawName: expenseItems.rawName,
         displayName: expenseItems.displayName,
         canonicalId: expenseItems.canonicalId,
+        note: expenseItems.note,
         quantity: expenseItems.quantity,
         unit: expenseItems.unit,
         unitPrice: expenseItems.unitPrice,
@@ -170,7 +180,7 @@ export class ExpenseService {
       id: expense.id,
       userId: expense.userId,
       title: expense.title,
-      totalAmount: expense.totalAmount,
+      totalAmount: roundMoney(expense.totalAmount),
       currency: expense.currency,
       expenseDate: expense.expenseDate,
       isGroup: expense.isGroup,
@@ -180,10 +190,11 @@ export class ExpenseService {
         rawName: i.rawName,
         displayName: i.displayName,
         canonicalId: i.canonicalId,
+        note: i.note,
         quantity: i.quantity,
         unit: i.unit,
-        unitPrice: i.unitPrice,
-        amount: i.amount,
+        unitPrice: roundOptionalMoney(i.unitPrice) ?? null,
+        amount: roundMoney(i.amount),
         paymentMode: i.paymentMode,
         categoryId: i.categoryId,
         categoryName: i.categoryName ?? undefined,
@@ -203,6 +214,26 @@ export class ExpenseService {
 
   async list(userId: string, query: ListExpensesQuery): Promise<PaginatedResponse<ExpenseResponse>> {
     const conditions = [eq(expenses.userId, userId)];
+
+    if (query.q) {
+      const pattern = `%${query.q.trim().toLowerCase()}%`;
+      conditions.push(
+        sql`(
+          lower(coalesce(${expenses.title}, '')) like ${pattern}
+          or lower(coalesce(${expenses.note}, '')) like ${pattern}
+          or exists (
+            select 1
+            from expense_items
+            where expense_items.expense_id = ${expenses.id}
+              and (
+                lower(expense_items.display_name) like ${pattern}
+                or lower(expense_items.raw_name) like ${pattern}
+                or lower(coalesce(expense_items.note, '')) like ${pattern}
+              )
+          )
+        )`,
+      );
+    }
 
     if (query.from) conditions.push(gte(expenses.expenseDate, query.from));
     if (query.to) conditions.push(lte(expenses.expenseDate, query.to));
@@ -258,6 +289,7 @@ export class ExpenseService {
             rawName: expenseItems.rawName,
             displayName: expenseItems.displayName,
             canonicalId: expenseItems.canonicalId,
+            note: expenseItems.note,
             quantity: expenseItems.quantity,
             unit: expenseItems.unit,
             unitPrice: expenseItems.unitPrice,
@@ -282,10 +314,11 @@ export class ExpenseService {
         rawName: item.rawName,
         displayName: item.displayName,
         canonicalId: item.canonicalId,
+        note: item.note,
         quantity: item.quantity,
         unit: item.unit,
-        unitPrice: item.unitPrice,
-        amount: item.amount,
+        unitPrice: roundOptionalMoney(item.unitPrice) ?? null,
+        amount: roundMoney(item.amount),
         paymentMode: item.paymentMode,
         categoryId: item.categoryId,
         categoryName: item.categoryName ?? undefined,
@@ -299,7 +332,7 @@ export class ExpenseService {
       id: e.id,
       userId: e.userId,
       title: e.title,
-      totalAmount: e.totalAmount,
+      totalAmount: roundMoney(e.totalAmount),
       currency: e.currency,
       expenseDate: e.expenseDate,
       isGroup: e.isGroup,
@@ -349,8 +382,13 @@ export class ExpenseService {
 
       let totalAmount = 0;
       for (const item of input.items) {
-        const resolution = await this.normalization.resolve(item.raw_name);
-        totalAmount += item.amount;
+        const resolution = await this.normalization.resolveForSave(
+          item.raw_name,
+          item.canonical_id,
+        );
+        const amount = roundMoney(item.amount);
+        const unitPrice = roundOptionalMoney(item.unit_price ?? null) ?? null;
+        totalAmount = roundMoney(totalAmount + amount);
 
         statements.push(
           this.db.insert(expenseItems).values({
@@ -359,10 +397,11 @@ export class ExpenseService {
             canonicalId: resolution.canonicalId,
             rawName: item.raw_name,
             displayName: resolution.displayName,
+            note: item.note ?? null,
             quantity: item.quantity ?? 1,
             unit: item.unit ?? null,
-            unitPrice: item.unit_price ?? null,
-            amount: item.amount,
+            unitPrice,
+            amount,
             paymentMode: item.payment_mode ?? null,
             categoryId: item.category_id ?? null,
             subcategoryId: item.subcategory_id ?? null,

@@ -52,11 +52,28 @@ body {
   }
 
   .input-clean {
-    @apply h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 focus:border-primary/60 focus:outline-none focus:ring-4 focus:ring-primary/10;
+    @apply h-11 min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-all duration-200 focus:border-primary/60 focus:outline-none focus:ring-4 focus:ring-primary/10;
   }
 
   .select-clean {
-    @apply h-11 w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-all duration-200 focus:border-primary/60 focus:outline-none focus:ring-4 focus:ring-primary/10;
+    @apply h-11 min-w-0 w-full rounded-2xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 transition-all duration-200 focus:border-primary/60 focus:outline-none focus:ring-4 focus:ring-primary/10;
+  }
+
+  .input-clean[type='date'] {
+    @apply block pr-3;
+    line-height: 1.25rem;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .input-clean[type='date']::-webkit-date-and-time-value {
+    min-height: 1.25rem;
+    text-align: left;
+  }
+
+  .input-clean[type='date']::-webkit-calendar-picker-indicator {
+    margin: 0;
+    opacity: 0.72;
   }
 
   .section-badge {

@@ -26,10 +26,12 @@ function useAuthFetch() {
 export function useExpenses(params?: Record<string, string>) {
   const fetchWithAuth = useAuthFetch();
   const searchParams = new URLSearchParams(params);
+  const queryString = searchParams.toString();
   return useQuery({
-    queryKey: ['expenses', params],
+    queryKey: ['expenses', queryString],
     queryFn: () =>
-      fetchWithAuth<PaginatedResponse<ExpenseResponse>>(`/api/expenses?${searchParams.toString()}`),
+      fetchWithAuth<PaginatedResponse<ExpenseResponse>>(`/api/expenses?${queryString}`),
+    placeholderData: (previousData) => previousData,
   });
 }
 

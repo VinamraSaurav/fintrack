@@ -60,7 +60,7 @@ export function RecentExpenses() {
           <h3 className="mt-1 text-lg font-semibold text-slate-900">Recent expenses</h3>
         </div>
         <Link
-          href="/dashboard/expenses"
+          href="/dashboard/entries"
           className="rounded-full border border-white/80 bg-white/80 px-3 py-1.5 text-xs font-medium text-primary transition hover:text-primary/80"
         >
           View all

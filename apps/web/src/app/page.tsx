@@ -32,7 +32,7 @@ export default async function HomePage() {
           Know where your money goes
         </h1>
         <p className="mb-8 max-w-lg text-lg text-gray-500">
-          Log expenses naturally. Type &ldquo;aloo&rdquo; and we know you mean Potato.
+          Log expenses naturally. Type &ldquo;aloo&rdquo; and we can suggest Potato before saving.
           Get smart insights about your spending habits.
         </p>
         <div className="flex gap-3">
@@ -50,7 +50,7 @@ export default async function HomePage() {
             {
               icon: '🧠',
               title: 'Smart Input',
-              desc: 'Type in any language. AI normalizes "pyaz" to Onion automatically.',
+              desc: 'Type in any language. AI suggests clean matches like "pyaz" to Onion before saving.',
             },
             {
               icon: '📊',
