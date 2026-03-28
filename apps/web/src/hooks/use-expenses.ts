@@ -166,6 +166,7 @@ export function useDrilldown(
   to?: string,
   categoryId?: string,
   subcategoryId?: string,
+  paymentMode?: string,
 ) {
   const fetchWithAuth = useAuthFetch();
   const params = new URLSearchParams({ level, period });
@@ -173,19 +174,21 @@ export function useDrilldown(
   if (to) params.set('to', to);
   if (categoryId) params.set('category_id', categoryId);
   if (subcategoryId) params.set('subcategory_id', subcategoryId);
+  if (paymentMode) params.set('payment_mode', paymentMode);
   return useQuery({
-    queryKey: ['insights', 'drilldown', level, period, from, to, categoryId, subcategoryId],
+    queryKey: ['insights', 'drilldown', level, period, from, to, categoryId, subcategoryId, paymentMode],
     queryFn: () => fetchWithAuth<{ data: any }>(`/api/insights/drilldown?${params.toString()}`),
   });
 }
 
-export function useItemStats(query: string, from?: string, to?: string) {
+export function useItemStats(query: string, from?: string, to?: string, paymentMode?: string) {
   const fetchWithAuth = useAuthFetch();
   const params = new URLSearchParams({ q: query });
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  if (paymentMode) params.set('payment_mode', paymentMode);
   return useQuery({
-    queryKey: ['insights', 'item-stats', query, from, to],
+    queryKey: ['insights', 'item-stats', query, from, to, paymentMode],
     queryFn: () => fetchWithAuth<{ data: any }>(`/api/insights/item-stats?${params.toString()}`),
     enabled: query.length >= 2,
   });

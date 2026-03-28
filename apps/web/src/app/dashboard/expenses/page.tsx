@@ -7,7 +7,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { exportCSV, exportXLSX, exportPDF } from '@/lib/export';
 import { useAuth } from '@clerk/nextjs';
 import { apiClient } from '@/lib/api-client';
-import type { ExpenseResponse, PaginatedResponse } from '@fintrack/shared';
+import { PAYMENT_MODES, type ExpenseResponse, type PaginatedResponse } from '@fintrack/shared';
 
 export default function ExpensesPage() {
   const [page, setPage] = useState(1);
@@ -18,12 +18,14 @@ export default function ExpensesPage() {
   const [itemSearch, setItemSearch] = useState('');
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+  const [paymentModeFilter, setPaymentModeFilter] = useState('');
 
   const params: Record<string, string> = { page: String(page), limit: '50', sort };
   if (dateFrom) params.from = dateFrom;
   if (dateTo) params.to = dateTo;
   if (minAmount) params.min_amount = minAmount;
   if (maxAmount) params.max_amount = maxAmount;
+  if (paymentModeFilter) params.payment_mode = paymentModeFilter;
 
   const { data, isLoading } = useExpenses(params);
   const { data: categoriesData } = useCategories();
@@ -38,6 +40,7 @@ export default function ExpensesPage() {
   const allItems = expenses.flatMap((exp) =>
     exp.items
       .filter((item) => !categoryFilter || item.categoryId === categoryFilter)
+      .filter((item) => !paymentModeFilter || item.paymentMode === paymentModeFilter)
       .filter(
         (item) =>
           !itemSearch ||
@@ -68,6 +71,7 @@ export default function ExpensesPage() {
         if (dateTo) exportParams.set('to', dateTo);
         if (minAmount) exportParams.set('min_amount', minAmount);
         if (maxAmount) exportParams.set('max_amount', maxAmount);
+        if (paymentModeFilter) exportParams.set('payment_mode', paymentModeFilter);
         const allData = await apiClient<PaginatedResponse<ExpenseResponse>>(
           `/api/expenses?${exportParams.toString()}`,
           { token },
@@ -75,7 +79,12 @@ export default function ExpensesPage() {
         exportExpenses = allData.data;
       }
 
-      const visibleExpenses = filterExpensesForExport(exportExpenses, categoryFilter, itemSearch);
+      const visibleExpenses = filterExpensesForExport(
+        exportExpenses,
+        categoryFilter,
+        itemSearch,
+        paymentModeFilter,
+      );
       const opts = { dateFrom, dateTo };
       if (format === 'csv') exportCSV(visibleExpenses, opts);
       else if (format === 'xlsx') await exportXLSX(visibleExpenses, opts);
@@ -189,6 +198,26 @@ export default function ExpensesPage() {
           </div>
           <div>
             <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
+              Payment
+            </label>
+            <select
+              className="select-clean w-auto text-xs"
+              value={paymentModeFilter}
+              onChange={(e) => {
+                setPaymentModeFilter(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All</option>
+              {PAYMENT_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
               Sort
             </label>
             <select
@@ -272,6 +301,7 @@ export default function ExpensesPage() {
                 <th className="px-3 py-2.5">Item</th>
                 <th className="px-3 py-2.5">Category</th>
                 <th className="px-3 py-2.5">Subcategory</th>
+                <th className="px-3 py-2.5">Payment</th>
                 <th className="px-3 py-2.5 text-right">Qty</th>
                 <th className="px-3 py-2.5">Unit</th>
                 <th className="px-3 py-2.5 text-right">Price/Unit</th>
@@ -290,6 +320,7 @@ export default function ExpensesPage() {
                   <td className="px-3 py-2 font-medium text-gray-900">{item.displayName}</td>
                   <td className="px-3 py-2 text-xs text-gray-500">{item.categoryName ?? '-'}</td>
                   <td className="px-3 py-2 text-xs text-gray-400">{item.subcategoryName ?? '-'}</td>
+                  <td className="px-3 py-2 text-xs text-gray-500">{item.paymentMode ?? '-'}</td>
                   <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-600">
                     {item.quantity}
                   </td>
@@ -309,7 +340,7 @@ export default function ExpensesPage() {
             </tbody>
             <tfoot>
               <tr className="border-t border-gray-200 bg-gray-50">
-                <td colSpan={7} className="px-3 py-2 text-xs font-medium text-gray-500">
+                <td colSpan={8} className="px-3 py-2 text-xs font-medium text-gray-500">
                   {allItems.length} items
                 </td>
                 <td className="px-3 py-2 text-right text-sm font-bold tabular-nums text-gray-900">
@@ -351,6 +382,7 @@ function filterExpensesForExport(
   expenses: ExpenseResponse[],
   categoryFilter: string,
   itemSearch: string,
+  paymentModeFilter: string,
 ): ExpenseResponse[] {
   const searchLower = itemSearch.trim().toLowerCase();
 
@@ -358,6 +390,7 @@ function filterExpensesForExport(
     .map((expense) => {
       const items = expense.items.filter((item) => {
         if (categoryFilter && item.categoryId !== categoryFilter) return false;
+        if (paymentModeFilter && item.paymentMode !== paymentModeFilter) return false;
         if (!searchLower) return true;
 
         return (

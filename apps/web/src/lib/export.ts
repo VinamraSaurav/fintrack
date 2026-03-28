@@ -19,6 +19,7 @@ function flattenExpenses(expenses: ExpenseResponse[]) {
         Item: item.displayName,
         Category: item.categoryName ?? 'Uncategorized',
         Subcategory: item.subcategoryName ?? '-',
+        Payment: item.paymentMode ?? '-',
         Quantity: item.quantity,
         Unit: item.unit ?? '-',
         'Price/Unit': unitPrice,
@@ -132,6 +133,7 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
     'Item',
     'Category',
     'Subcategory',
+    'Payment',
     'Qty',
     'Unit',
     'Price/Unit',
@@ -142,6 +144,7 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
     r.Item,
     r.Category,
     r.Subcategory,
+    r.Payment,
     r.Quantity,
     r.Unit,
     typeof r['Price/Unit'] === 'number' ? r['Price/Unit'].toLocaleString('en-IN') : r['Price/Unit'],
@@ -149,7 +152,7 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
   ]);
 
   // Add total row
-  body.push(['', '', '', '', '', '', 'TOTAL', `INR ${totalAmount.toLocaleString('en-IN')}`]);
+  body.push(['', '', '', '', '', '', '', 'TOTAL', `INR ${totalAmount.toLocaleString('en-IN')}`]);
 
   autoTable(doc, {
     head: [headers],
@@ -172,9 +175,9 @@ export async function exportPDF(expenses: ExpenseResponse[], options?: ExportOpt
     },
     columnStyles: {
       0: { cellWidth: 22 },
-      4: { halign: 'right' },
-      6: { halign: 'right' },
-      7: { halign: 'right', fontStyle: 'bold' },
+      5: { halign: 'right' },
+      7: { halign: 'right' },
+      8: { halign: 'right', fontStyle: 'bold' },
     },
     didParseCell: (data: any) => {
       // Style the total row

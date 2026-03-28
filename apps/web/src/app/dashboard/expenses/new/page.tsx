@@ -8,6 +8,7 @@ import {
   createExpenseSchema,
   type CreateExpenseInput,
   type ExpenseResponse,
+  PAYMENT_MODES,
   type Unit,
   type UpdateExpenseInput,
 } from '@fintrack/shared';
@@ -19,12 +20,34 @@ import {
 } from '@/hooks/use-expenses';
 import { getTodayDateValue } from '@/lib/utils';
 
+const DEFAULT_PAYMENT_MODE = PAYMENT_MODES[1];
+const itemLabelClass =
+  'mb-1 block min-h-[12px] text-[10px] font-medium uppercase leading-3 text-gray-400';
+
+function FieldError({ message }: { message?: string }) {
+  return (
+    <p
+      className={`mt-1 min-h-[1rem] text-[11px] leading-4 ${
+        message ? 'text-red-500' : 'text-transparent'
+      }`}
+    >
+      {message ?? '\u00A0'}
+    </p>
+  );
+}
+
+function getFieldClass(baseClass: string, hasError?: boolean) {
+  return hasError
+    ? `${baseClass} border-red-200 bg-red-50/40 focus:border-red-300 focus:ring-red-100`
+    : baseClass;
+}
+
 function getDefaultExpenseValues(): CreateExpenseInput {
   return {
     expense_date: getTodayDateValue(),
     currency: 'INR',
     is_group: false,
-    items: [{ raw_name: '', amount: 0, quantity: 1 }],
+    items: [{ raw_name: '', amount: 0, quantity: 1, payment_mode: DEFAULT_PAYMENT_MODE }],
   };
 }
 
@@ -47,6 +70,9 @@ function mapExpenseToFormValues(expense: ExpenseResponse): CreateExpenseInput {
             unit: normalizeUnit(item.unit),
             unit_price: item.unitPrice ?? undefined,
             amount: item.amount,
+            payment_mode:
+              (item.paymentMode as CreateExpenseInput['items'][number]['payment_mode']) ??
+              DEFAULT_PAYMENT_MODE,
             category_id: item.categoryId ?? undefined,
             subcategory_id: item.subcategoryId ?? undefined,
           }))
@@ -102,6 +128,11 @@ function NewExpensePageContent() {
   const { fields, append, remove, replace } = useFieldArray({ control, name: 'items' });
   const watchedItems = useWatch({ control, name: 'items' });
 
+  const getPreferredPaymentMode = () => {
+    const items = getValues('items');
+    return items[items.length - 1]?.payment_mode ?? DEFAULT_PAYMENT_MODE;
+  };
+
   useEffect(() => {
     if (!expense) return;
     const formValues = mapExpenseToFormValues(expense);
@@ -143,6 +174,7 @@ function NewExpensePageContent() {
           quantity: item.quantity ?? 1,
           unit: normalizeUnit(item.unit),
           amount: item.amount ?? 0,
+          payment_mode: getPreferredPaymentMode(),
           category_id: matchedCat?.id ?? undefined,
           subcategory_id: matchedSub?.id ?? undefined,
         };
@@ -173,17 +205,21 @@ function NewExpensePageContent() {
     }
   };
 
+  const getSelectionErrorPaths = (index: number) =>
+    [`items.${index}.category_id`, `items.${index}.subcategory_id`] as const;
+
   const validateItemSelections = (items: CreateExpenseInput['items']) => {
     let hasError = false;
 
     items.forEach((item, index) => {
+      clearErrors(getSelectionErrorPaths(index));
       const selectedCategory = categories.find((category: any) => category.id === item.category_id);
       const hasSubcategories = (selectedCategory?.subcategories?.length ?? 0) > 0;
 
       if (!item.category_id) {
         setError(`items.${index}.category_id`, {
           type: 'manual',
-          message: 'Choose a category',
+          message: 'Pick category',
         });
         hasError = true;
       }
@@ -191,7 +227,7 @@ function NewExpensePageContent() {
       if (item.category_id && hasSubcategories && !item.subcategory_id) {
         setError(`items.${index}.subcategory_id`, {
           type: 'manual',
-          message: 'Choose a subcategory',
+          message: 'Pick subcategory',
         });
         hasError = true;
       }
@@ -201,7 +237,6 @@ function NewExpensePageContent() {
   };
 
   const onSubmit = async (data: CreateExpenseInput) => {
-    clearErrors();
     if (!validateItemSelections(data.items)) return;
 
     const processedItems = data.items.map((item) => ({
@@ -228,6 +263,10 @@ function NewExpensePageContent() {
       await createExpense.mutateAsync({ ...data, items: processedItems });
       router.push('/dashboard/expenses');
     } catch {}
+  };
+
+  const onInvalidSubmit = () => {
+    validateItemSelections(getValues('items'));
   };
 
   const isSaving = createExpense.isPending || updateExpense.isPending;
@@ -258,28 +297,35 @@ function NewExpensePageContent() {
   }
 
   return (
-    <div className="page-container max-w-2xl">
-      <button
-        onClick={() => router.back()}
-        className="mb-4 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
-      >
-        <svg
-          className="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={1.5}
+    <div className="page-container max-w-2xl space-y-5">
+      <div className="space-y-3">
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-500 transition hover:text-gray-700"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back
-      </button>
+          <svg
+            className="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
 
-      <h1 className="mb-6 text-xl font-bold text-gray-900">
-        {isEditMode ? 'Edit Expense' : 'Add Expense'}
-      </h1>
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">
+            {isEditMode ? 'Edit Expense' : 'Add Expense'}
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Capture items, payment mode, and category details in one clean entry.
+          </p>
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit, onInvalidSubmit)} className="space-y-5">
         {/* Basic Info */}
         <div className="card-elevated space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -295,18 +341,20 @@ function NewExpensePageContent() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-500">Date</label>
-              <input type="date" {...register('expense_date')} className="input-clean" />
-              {errors.expense_date && (
-                <p className="mt-1 text-xs text-red-500">{errors.expense_date.message}</p>
-              )}
+              <input
+                type="date"
+                {...register('expense_date')}
+                className={getFieldClass('input-clean', Boolean(errors.expense_date))}
+              />
+              <FieldError message={errors.expense_date?.message} />
             </div>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Note</label>
             <textarea
               {...register('note')}
-              className="input-clean"
-              rows={2}
+              className="input-clean !h-auto min-h-[88px] py-3"
+              rows={3}
               placeholder="Optional notes..."
             />
           </div>
@@ -373,11 +421,21 @@ function NewExpensePageContent() {
         {/* Items */}
         <div className="card-elevated space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Items</h2>
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Items</h2>
+              <p className="mt-0.5 text-xs text-gray-500">Payment mode is captured per item.</p>
+            </div>
             <button
               type="button"
-              className="text-xs font-medium text-primary hover:underline"
-              onClick={() => append({ raw_name: '', amount: 0, quantity: 1 })}
+              className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/10"
+              onClick={() =>
+                append({
+                  raw_name: '',
+                  amount: 0,
+                  quantity: 1,
+                  payment_mode: getPreferredPaymentMode(),
+                })
+              }
             >
               + Add item
             </button>
@@ -417,167 +475,181 @@ function NewExpensePageContent() {
                   </button>
                 )}
 
-                {/* Row 1: Category → Subcategory → Name */}
-                <div className="mb-2 grid grid-cols-12 gap-2 pr-8">
-                  <div className="col-span-12 sm:col-span-4">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      Category
-                    </label>
-                    <select
-                      {...register(`items.${index}.category_id`, {
-                        onChange: () => {
-                          setValue(`items.${index}.subcategory_id`, '');
-                          clearErrors([
-                            `items.${index}.category_id`,
-                            `items.${index}.subcategory_id`,
-                          ]);
-                        },
-                      })}
-                      className="select-clean text-sm"
-                    >
-                      <option value="">Select category</option>
-                      {categories.map((cat: any) => (
-                        <option key={cat.id} value={cat.id}>
-                          {cat.icon} {cat.name}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 pr-8 sm:grid-cols-12">
+                    <div className="sm:col-span-4">
+                      <label className={itemLabelClass}>
+                        Category
+                      </label>
+                      <select
+                        {...register(`items.${index}.category_id`, {
+                          onChange: () => {
+                            setValue(`items.${index}.subcategory_id`, '');
+                            clearErrors([
+                              `items.${index}.category_id`,
+                              `items.${index}.subcategory_id`,
+                            ]);
+                          },
+                        })}
+                        className={getFieldClass(
+                          'select-clean text-sm',
+                          Boolean(errors.items?.[index]?.category_id),
+                        )}
+                      >
+                        <option value="">Select category</option>
+                        {categories.map((cat: any) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.icon} {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      <FieldError message={errors.items?.[index]?.category_id?.message} />
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label className={itemLabelClass}>
+                        Subcategory
+                      </label>
+                      <select
+                        {...register(`items.${index}.subcategory_id`, {
+                          onChange: () => clearErrors(`items.${index}.subcategory_id`),
+                        })}
+                        className={getFieldClass(
+                          'select-clean text-sm',
+                          Boolean(errors.items?.[index]?.subcategory_id),
+                        )}
+                        disabled={!selectedCatId}
+                      >
+                        <option value="">
+                          {selectedCatId ? 'Select subcategory' : 'Choose category first'}
                         </option>
-                      ))}
-                    </select>
-                    {errors.items?.[index]?.category_id && (
-                      <p className="mt-0.5 text-xs text-red-500">
-                        {errors.items[index].category_id?.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="col-span-6 sm:col-span-3">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      Subcategory
-                    </label>
-                    <select
-                      {...register(`items.${index}.subcategory_id`, {
-                        onChange: () => clearErrors(`items.${index}.subcategory_id`),
-                      })}
-                      className="select-clean text-sm"
-                      disabled={!selectedCatId}
-                    >
-                      <option value="">
-                        {selectedCatId ? 'Select subcategory' : 'Choose category first'}
-                      </option>
-                      {subs.map((sub: any) => (
-                        <option key={sub.id} value={sub.id}>
+                        {subs.map((sub: any) => (
+                          <option key={sub.id} value={sub.id}>
                           {sub.name}
                         </option>
                       ))}
-                    </select>
-                    {errors.items?.[index]?.subcategory_id && (
-                      <p className="mt-0.5 text-xs text-red-500">
-                        {errors.items[index].subcategory_id?.message}
-                      </p>
-                    )}
+                      </select>
+                      <FieldError message={errors.items?.[index]?.subcategory_id?.message} />
+                    </div>
+                    <div className="sm:col-span-5">
+                      <label className={itemLabelClass}>
+                        Item Name
+                      </label>
+                      <input
+                        {...register(`items.${index}.raw_name`)}
+                        className={getFieldClass(
+                          'input-clean text-sm',
+                          Boolean(errors.items?.[index]?.raw_name),
+                        )}
+                        placeholder={
+                          selectedCatId
+                            ? 'e.g. KIIT exam fee, maths notebook'
+                            : 'e.g. aloo, milk, exam fee'
+                        }
+                      />
+                      <FieldError message={errors.items?.[index]?.raw_name?.message} />
+                    </div>
                   </div>
-                  <div className="col-span-6 sm:col-span-5">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      Item Name
-                    </label>
-                    <input
-                      {...register(`items.${index}.raw_name`)}
-                      className="input-clean text-sm"
-                      placeholder={
-                        selectedCatId
-                          ? 'e.g. KIIT exam fee, maths notebook'
-                          : 'e.g. aloo, milk, exam fee'
-                      }
-                    />
-                    {errors.items?.[index]?.raw_name && (
-                      <p className="mt-0.5 text-xs text-red-500">
-                        {errors.items[index].raw_name?.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
 
-                {/* Row 2: Qty + Unit + Amount + Unit Price (calculated) */}
-                <div className="grid grid-cols-12 gap-2">
-                  <div className="col-span-3">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      Qty
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      {...register(`items.${index}.quantity`, { valueAsNumber: true })}
-                      className="input-clean text-sm"
-                      placeholder="1"
-                    />
-                    {errors.items?.[index]?.quantity && (
-                      <p className="mt-0.5 text-xs text-red-500">
-                        {errors.items[index].quantity?.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="col-span-3">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      Unit
-                    </label>
-                    <select {...register(`items.${index}.unit`)} className="select-clean text-sm">
-                      <option value="">No unit</option>
-                      <optgroup label="Weight">
-                        <option value="kg">kg</option>
-                        <option value="g">g</option>
-                      </optgroup>
-                      <optgroup label="Volume">
-                        <option value="L">L</option>
-                        <option value="ml">ml</option>
-                      </optgroup>
-                      <optgroup label="Count">
-                        <option value="pcs">pcs</option>
-                        <option value="dozen">dozen</option>
-                        <option value="pack">pack</option>
-                        <option value="box">box</option>
-                        <option value="bag">bag</option>
-                        <option value="pair">pair</option>
-                      </optgroup>
-                      <optgroup label="Serving">
-                        <option value="plate">plate</option>
-                        <option value="serving">serving</option>
-                        <option value="cup">cup</option>
-                        <option value="slice">slice</option>
-                      </optgroup>
-                      <optgroup label="Container">
-                        <option value="bottle">bottle</option>
-                        <option value="can">can</option>
-                        <option value="jar">jar</option>
-                      </optgroup>
-                      <optgroup label="Other">
-                        <option value="kWh">kWh</option>
-                        <option value="trip">trip</option>
-                        <option value="month">month</option>
-                        <option value="meter">meter</option>
-                      </optgroup>
-                    </select>
-                  </div>
-                  <div className="col-span-3">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      Total Amount
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      {...register(`items.${index}.amount`, { valueAsNumber: true })}
-                      className="input-clean text-sm"
-                      placeholder="0"
-                    />
-                    {errors.items?.[index]?.amount && (
-                      <p className="mt-0.5 text-xs text-red-500">
-                        {errors.items[index].amount?.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="col-span-3">
-                    <label className="mb-1 block text-[10px] font-medium uppercase text-gray-400">
-                      {unit ? 'Price/Unit' : 'Per item'}
-                    </label>
-                    <div className="flex h-[38px] items-center rounded-lg border border-gray-200 bg-gray-100 px-3 text-sm text-gray-500">
-                      {unitPrice}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-12">
+                    <div className="sm:col-span-2">
+                      <label className={itemLabelClass}>
+                        Qty
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        {...register(`items.${index}.quantity`, { valueAsNumber: true })}
+                        className={getFieldClass(
+                          'input-clean text-sm',
+                          Boolean(errors.items?.[index]?.quantity),
+                        )}
+                        placeholder="1"
+                      />
+                      <FieldError message={errors.items?.[index]?.quantity?.message} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className={itemLabelClass}>
+                        Unit
+                      </label>
+                      <select {...register(`items.${index}.unit`)} className="select-clean text-sm">
+                        <option value="">No unit</option>
+                        <optgroup label="Weight">
+                          <option value="kg">kg</option>
+                          <option value="g">g</option>
+                        </optgroup>
+                        <optgroup label="Volume">
+                          <option value="L">L</option>
+                          <option value="ml">ml</option>
+                        </optgroup>
+                        <optgroup label="Count">
+                          <option value="pcs">pcs</option>
+                          <option value="dozen">dozen</option>
+                          <option value="pack">pack</option>
+                          <option value="box">box</option>
+                          <option value="bag">bag</option>
+                          <option value="pair">pair</option>
+                        </optgroup>
+                        <optgroup label="Serving">
+                          <option value="plate">plate</option>
+                          <option value="serving">serving</option>
+                          <option value="cup">cup</option>
+                          <option value="slice">slice</option>
+                        </optgroup>
+                        <optgroup label="Container">
+                          <option value="bottle">bottle</option>
+                          <option value="can">can</option>
+                          <option value="jar">jar</option>
+                        </optgroup>
+                        <optgroup label="Other">
+                          <option value="kWh">kWh</option>
+                          <option value="trip">trip</option>
+                          <option value="month">month</option>
+                          <option value="meter">meter</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-3">
+                      <label className={itemLabelClass}>
+                        Amount
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        {...register(`items.${index}.amount`, { valueAsNumber: true })}
+                        className={getFieldClass(
+                          'input-clean text-sm',
+                          Boolean(errors.items?.[index]?.amount),
+                        )}
+                        placeholder="0"
+                      />
+                      <FieldError message={errors.items?.[index]?.amount?.message} />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className={itemLabelClass}>
+                        {unit ? 'Price/Unit' : 'Per item'}
+                      </label>
+                      <div className="flex h-[38px] items-center rounded-lg border border-gray-200 bg-gray-100 px-3 text-sm text-gray-500">
+                        {unitPrice}
+                      </div>
+                    </div>
+                    <div className="col-span-2 sm:col-span-3">
+                      <label className={itemLabelClass}>
+                        Payment mode
+                      </label>
+                      <select
+                        {...register(`items.${index}.payment_mode`)}
+                        className={getFieldClass(
+                          'select-clean text-sm',
+                          Boolean(errors.items?.[index]?.payment_mode),
+                        )}
+                      >
+                        {PAYMENT_MODES.map((mode) => (
+                          <option key={mode} value={mode}>
+                            {mode}
+                          </option>
+                        ))}
+                      </select>
+                      <FieldError message={errors.items?.[index]?.payment_mode?.message} />
                     </div>
                   </div>
                 </div>

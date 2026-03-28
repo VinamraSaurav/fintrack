@@ -5,11 +5,13 @@ import { askInsightSchema } from '@fintrack/shared/validators';
 import type { AppEnv } from '../types/env';
 import { InsightService } from '../services/insight.service';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, gte, lte, desc, sql, like } from 'drizzle-orm';
+import { eq, and, or, gte, lte, desc, sql, inArray } from 'drizzle-orm';
+import { PAYMENT_MODES } from '@fintrack/shared';
 import {
   expenses,
   expenseItems,
   canonicalItems,
+  aliases,
   categories,
   subcategories,
 } from '@fintrack/shared/schema';
@@ -28,6 +30,7 @@ const itemStatsSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  payment_mode: z.enum(PAYMENT_MODES).optional(),
 });
 
 const drilldownSchema = z.object({
@@ -35,6 +38,7 @@ const drilldownSchema = z.object({
   period: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
   category_id: z.string().optional(),
   subcategory_id: z.string().optional(),
+  payment_mode: z.enum(PAYMENT_MODES).optional(),
   from: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -63,12 +67,14 @@ export const insightRoutes = new Hono<AppEnv>()
 
   .get('/drilldown', zValidator('query', drilldownSchema), async (c) => {
     const userId = c.get('userId');
-    const { level, period, category_id, subcategory_id, from, to } = c.req.valid('query');
+    const { level, period, category_id, subcategory_id, from, to, payment_mode } =
+      c.req.valid('query');
     const db = drizzle(c.env.DB);
 
     const conditions: any[] = [eq(expenses.userId, userId)];
     if (from) conditions.push(gte(expenses.expenseDate, from));
     if (to) conditions.push(lte(expenses.expenseDate, to));
+    if (payment_mode) conditions.push(eq(expenseItems.paymentMode, payment_mode));
 
     // Match buckets to the UI:
     // - daily: single day
@@ -189,16 +195,52 @@ export const insightRoutes = new Hono<AppEnv>()
 
   .get('/item-stats', zValidator('query', itemStatsSchema), async (c) => {
     const userId = c.get('userId');
-    const { q, from, to } = c.req.valid('query');
+    const { q, from, to, payment_mode } = c.req.valid('query');
     const db = drizzle(c.env.DB);
 
-    const pattern = `%${q.toLowerCase()}%`;
-    const conditions = [
-      eq(expenses.userId, userId),
-      sql`(LOWER(${expenseItems.displayName}) LIKE ${pattern} OR LOWER(${expenseItems.rawName}) LIKE ${pattern})`,
-    ];
+    const normalizedQuery = q.trim().toLowerCase();
+    const pattern = `%${normalizedQuery}%`;
+    const conditions = [eq(expenses.userId, userId)];
+
+    // Prefer exact canonical matches for fully typed item names. This avoids
+    // broad text matches pulling in unrelated line items from mixed expenses.
+    const [aliasMatches, canonicalNameMatches] = await Promise.all([
+      db
+        .select({ canonicalId: aliases.canonicalId })
+        .from(aliases)
+        .where(eq(aliases.rawName, normalizedQuery)),
+      db
+        .select({ canonicalId: canonicalItems.id })
+        .from(canonicalItems)
+        .where(sql`LOWER(${canonicalItems.name}) = ${normalizedQuery}`),
+    ]);
+
+    const canonicalIds = Array.from(
+      new Set([
+        ...aliasMatches.map((match) => match.canonicalId),
+        ...canonicalNameMatches.map((match) => match.canonicalId),
+      ]),
+    );
+
+    const exactTextMatch = or(
+      sql`LOWER(TRIM(${expenseItems.displayName})) = ${normalizedQuery}`,
+      sql`LOWER(TRIM(${expenseItems.rawName})) = ${normalizedQuery}`,
+    );
+
+    const fuzzyTextMatch = or(
+      sql`LOWER(${expenseItems.displayName}) LIKE ${pattern}`,
+      sql`LOWER(${expenseItems.rawName}) LIKE ${pattern}`,
+    );
+
+    conditions.push(
+      canonicalIds.length > 0
+        ? or(inArray(expenseItems.canonicalId, canonicalIds), exactTextMatch)!
+        : fuzzyTextMatch!,
+    );
+
     if (from) conditions.push(gte(expenses.expenseDate, from));
     if (to) conditions.push(lte(expenses.expenseDate, to));
+    if (payment_mode) conditions.push(eq(expenseItems.paymentMode, payment_mode));
 
     // Aggregate stats for matching items
     const [stats] = await db
@@ -237,6 +279,7 @@ export const insightRoutes = new Hono<AppEnv>()
         quantity: expenseItems.quantity,
         unit: expenseItems.unit,
         amount: expenseItems.amount,
+        paymentMode: expenseItems.paymentMode,
         date: expenses.expenseDate,
         categoryName: categories.name,
         subcategoryName: subcategories.name,

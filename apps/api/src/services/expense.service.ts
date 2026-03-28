@@ -51,6 +51,7 @@ export class ExpenseService {
       unit: string | null;
       unitPrice: number | null;
       amount: number;
+      paymentMode: string | null;
       categoryId: string | null;
       subcategoryId: string | null;
     }[] = [];
@@ -71,6 +72,7 @@ export class ExpenseService {
         unit: item.unit ?? null,
         unitPrice: item.unit_price ?? null,
         amount: item.amount,
+        paymentMode: item.payment_mode ?? null,
         categoryId: item.category_id ?? null,
         subcategoryId: item.subcategory_id ?? null,
       });
@@ -100,6 +102,7 @@ export class ExpenseService {
           unit: item.unit,
           unitPrice: item.unitPrice,
           amount: item.amount,
+          paymentMode: item.paymentMode,
           categoryId: item.categoryId,
           subcategoryId: item.subcategoryId,
         }),
@@ -145,6 +148,7 @@ export class ExpenseService {
         unit: expenseItems.unit,
         unitPrice: expenseItems.unitPrice,
         amount: expenseItems.amount,
+        paymentMode: expenseItems.paymentMode,
         categoryId: expenseItems.categoryId,
         subcategoryId: expenseItems.subcategoryId,
         categoryName: categories.name,
@@ -180,6 +184,7 @@ export class ExpenseService {
         unit: i.unit,
         unitPrice: i.unitPrice,
         amount: i.amount,
+        paymentMode: i.paymentMode,
         categoryId: i.categoryId,
         categoryName: i.categoryName ?? undefined,
         subcategoryId: i.subcategoryId,
@@ -203,6 +208,16 @@ export class ExpenseService {
     if (query.to) conditions.push(lte(expenses.expenseDate, query.to));
     if (query.min_amount) conditions.push(gte(expenses.totalAmount, query.min_amount));
     if (query.max_amount) conditions.push(lte(expenses.totalAmount, query.max_amount));
+    if (query.payment_mode) {
+      conditions.push(
+        sql`exists (
+          select 1
+          from expense_items
+          where expense_items.expense_id = ${expenses.id}
+            and expense_items.payment_mode = ${query.payment_mode}
+        )`,
+      );
+    }
 
     const where = and(...conditions);
 
@@ -247,6 +262,7 @@ export class ExpenseService {
             unit: expenseItems.unit,
             unitPrice: expenseItems.unitPrice,
             amount: expenseItems.amount,
+            paymentMode: expenseItems.paymentMode,
             categoryId: expenseItems.categoryId,
             subcategoryId: expenseItems.subcategoryId,
             categoryName: categories.name,
@@ -270,6 +286,7 @@ export class ExpenseService {
         unit: item.unit,
         unitPrice: item.unitPrice,
         amount: item.amount,
+        paymentMode: item.paymentMode,
         categoryId: item.categoryId,
         categoryName: item.categoryName ?? undefined,
         subcategoryId: item.subcategoryId,
@@ -346,6 +363,7 @@ export class ExpenseService {
             unit: item.unit ?? null,
             unitPrice: item.unit_price ?? null,
             amount: item.amount,
+            paymentMode: item.payment_mode ?? null,
             categoryId: item.category_id ?? null,
             subcategoryId: item.subcategory_id ?? null,
           }),

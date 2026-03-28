@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { UNITS, CURRENCIES, SORT_OPTIONS, SUMMARY_PERIODS } from './constants';
+import { UNITS, CURRENCIES, PAYMENT_MODES, SORT_OPTIONS, SUMMARY_PERIODS } from './constants';
 
 // ─── Expense Item Input ──────────────────────────────────────────────────────
 
@@ -21,10 +21,10 @@ const itemQuantitySchema = z.preprocess(
   },
   z
     .number({
-      required_error: 'Enter a quantity',
-      invalid_type_error: 'Enter a valid quantity',
+      required_error: 'Enter qty',
+      invalid_type_error: 'Invalid qty',
     })
-    .positive('Quantity must be greater than 0'),
+    .positive('Qty > 0'),
 );
 
 const itemAmountSchema = z.preprocess(
@@ -34,22 +34,23 @@ const itemAmountSchema = z.preprocess(
   },
   z
     .number({
-      required_error: 'Enter a total amount',
-      invalid_type_error: 'Enter a valid amount',
+      required_error: 'Enter amount',
+      invalid_type_error: 'Invalid amount',
     })
-    .positive('Total amount must be greater than 0'),
+    .positive('Amount > 0'),
 );
 
 export const createExpenseItemSchema = z.object({
   raw_name: z
     .string()
     .trim()
-    .min(1, 'Enter an item name')
-    .max(200, 'Item name must be under 200 characters'),
+    .min(1, 'Enter item')
+    .max(200, 'Item too long'),
   quantity: itemQuantitySchema,
   unit: optionalUnitSchema,
   unit_price: z.number().nonnegative().optional(),
   amount: itemAmountSchema,
+  payment_mode: z.enum(PAYMENT_MODES, { required_error: 'Pick payment' }),
   category_id: optionalIdSchema,
   subcategory_id: optionalIdSchema,
 });
@@ -110,6 +111,7 @@ export const listExpensesSchema = z.object({
   product: z.string().optional(),
   min_amount: z.coerce.number().optional(),
   max_amount: z.coerce.number().optional(),
+  payment_mode: z.enum(PAYMENT_MODES).optional(),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(20),
   sort: z.enum(SORT_OPTIONS).optional().default('date_desc'),

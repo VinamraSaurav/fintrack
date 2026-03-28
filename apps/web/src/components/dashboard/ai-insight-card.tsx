@@ -4,6 +4,25 @@ import Link from 'next/link';
 import { useInsightSummary } from '@/hooks/use-expenses';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/utils';
 
+function SparkleGlyph() {
+  return (
+    <svg
+      className="h-4.5 w-4.5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 4.75 13.657 8.843 17.75 10.5 13.657 12.157 12 16.25 10.343 12.157 6.25 10.5 10.343 8.843 12 4.75Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18.25 5.75v1.5M17.5 6.5h1.5" />
+    </svg>
+  );
+}
+
 export function AIInsightCard() {
   const { data } = useInsightSummary();
   const summary = data?.data;
@@ -22,19 +41,7 @@ export function AIInsightCard() {
       <div className="card-elevated !p-4 lg:hidden">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] bg-primary/10 text-primary">
-            <svg
-              className="h-4.5 w-4.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.8}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.813 15.904 9 18.75l-2.842.813a1.125 1.125 0 0 0 0 2.124L9 22.5l.813 2.842a1.125 1.125 0 0 0 2.124 0L12.75 22.5l2.842-.813a1.125 1.125 0 0 0 0-2.124L12.75 18.75l-.813-2.846a1.125 1.125 0 0 0-2.124 0Z"
-              />
-            </svg>
+            <SparkleGlyph />
           </div>
 
           <div className="min-w-0 flex-1">
@@ -72,7 +79,7 @@ export function AIInsightCard() {
               href="/dashboard/insights"
               className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] font-medium text-primary hover:underline"
             >
-              Open AI insights
+              Open analytics
               <svg
                 className="h-3.5 w-3.5"
                 fill="none"
@@ -94,19 +101,7 @@ export function AIInsightCard() {
       <div className="hidden rounded-[28px] border border-gray-200 bg-white px-5 py-4 shadow-[var(--card-shadow-soft)] lg:block">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <svg
-              className="h-4.5 w-4.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.8}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.813 15.904 9 18.75l-2.842.813a1.125 1.125 0 0 0 0 2.124L9 22.5l.813 2.842a1.125 1.125 0 0 0 2.124 0L12.75 22.5l2.842-.813a1.125 1.125 0 0 0 0-2.124L12.75 18.75l-.813-2.846a1.125 1.125 0 0 0-2.124 0Z"
-              />
-            </svg>
+            <SparkleGlyph />
           </div>
 
           <div className="min-w-0 flex-1 text-sm text-slate-600">
@@ -119,7 +114,7 @@ export function AIInsightCard() {
             href="/dashboard/insights"
             className="shrink-0 text-sm font-medium text-primary hover:underline"
           >
-            View AI insights →
+            View analytics →
           </Link>
         </div>
       </div>

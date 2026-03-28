@@ -23,6 +23,17 @@ export type Unit = (typeof UNITS)[number];
 export const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP'] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
+// ─── Payment Modes ──────────────────────────────────────────────────────────
+
+export const PAYMENT_MODES = [
+  'Cash',
+  'UPI',
+  'Credit Card UPI',
+  'Credit Card',
+  'Debit Card',
+] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
+
 // ─── Sort Options ────────────────────────────────────────────────────────────
 
 export const SORT_OPTIONS = ['date_asc', 'date_desc', 'amount_asc', 'amount_desc'] as const;

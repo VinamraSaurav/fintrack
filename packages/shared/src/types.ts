@@ -45,6 +45,7 @@ export interface ExpenseItemResponse {
   unit: string | null;
   unitPrice: number | null;
   amount: number;
+  paymentMode: string | null;
   categoryId: string | null;
   categoryName?: string;
   subcategoryId: string | null;

@@ -113,6 +113,7 @@ export const expenseItems = sqliteTable('expense_items', {
   unit: text('unit'), // kg, L, pcs, kWh, NA
   unitPrice: real('unit_price'),
   amount: real('amount').notNull(),
+  paymentMode: text('payment_mode'),
   categoryId: text('category_id').references(() => categories.id),
   subcategoryId: text('subcategory_id').references(() => subcategories.id),
   createdAt: text('created_at')
@@ -122,6 +123,7 @@ export const expenseItems = sqliteTable('expense_items', {
   index('idx_items_expense').on(table.expenseId),
   index('idx_items_canonical').on(table.canonicalId),
   index('idx_items_category').on(table.categoryId),
+  index('idx_items_payment_mode').on(table.paymentMode),
 ]);
 
 // ─── Expense Participants (group expenses) ───────────────────────────────────
